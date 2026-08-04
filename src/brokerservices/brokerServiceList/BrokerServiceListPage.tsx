@@ -15,10 +15,16 @@ import type { BrokerService } from '../../k8s/types';
 import { BrokerServiceListTable } from './components/BrokerServiceListTable';
 
 export interface BrokerServiceListPageProps {
+  /** Active namespace selected in the console project selector. */
   namespace: string;
+  /** K8s model passed by the console resource list extension — not used directly. */
   model: K8sModel;
 }
 
+/**
+ * List page for BrokerService resources.
+ * The create link is hidden for users without create permissions via createAccessReview.
+ */
 const BrokerServiceListPage: FC<BrokerServiceListPageProps> = ({ namespace }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const [activeNamespace] = useActiveNamespace();
@@ -31,7 +37,7 @@ const BrokerServiceListPage: FC<BrokerServiceListPageProps> = ({ namespace }) =>
         : 'default';
   const createPath = `/k8s/ns/${createNamespace}/brokerservices/~new`;
 
-  const watchResult = useK8sWatchResource<BrokerService[]>({
+  const [brokerServices, loaded, loadError] = useK8sWatchResource<BrokerService[]>({
     namespace,
     groupVersionKind: {
       group: BrokerServiceModel.apiGroup,
@@ -41,13 +47,23 @@ const BrokerServiceListPage: FC<BrokerServiceListPageProps> = ({ namespace }) =>
     isList: true,
   }) as [BrokerService[], boolean, unknown];
 
-  const [brokerServices, loaded, loadError] = watchResult;
-
   return (
     <>
       <DocumentTitle>{t('BrokerServices')}</DocumentTitle>
       <ListPageHeader title={t('BrokerServices')}>
-        <ListPageCreateLink to={createPath}>{t('Create BrokerService')}</ListPageCreateLink>
+        <ListPageCreateLink
+          to={createPath}
+          createAccessReview={{
+            groupVersionKind: {
+              group: BrokerServiceModel.apiGroup,
+              version: BrokerServiceModel.apiVersion,
+              kind: BrokerServiceModel.kind,
+            },
+            namespace,
+          }}
+        >
+          {t('Create BrokerService')}
+        </ListPageCreateLink>
       </ListPageHeader>
       <ListPageBody>
         <BrokerServiceListTable data={brokerServices} loaded={loaded} loadError={loadError} />
