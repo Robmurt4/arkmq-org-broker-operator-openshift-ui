@@ -8,6 +8,10 @@ export const k8sDelete = jest.fn();
 export const useK8sWatchResource = jest.fn(() => [[], false, undefined]);
 export const useAccessReview = jest.fn(() => [true, false]);
 export const useDeleteModal = jest.fn(() => jest.fn());
+export const useLabelsModal = jest.fn(() => jest.fn());
+export const useAnnotationsModal = jest.fn(() => jest.fn());
+export const useUserPreference = jest.fn(() => [[], jest.fn(), true]);
+export const useActivePerspective = jest.fn(() => ['admin', jest.fn()]);
 
 export const useActiveNamespace = jest.fn(() => ['test-namespace', jest.fn()]);
 
@@ -53,3 +57,20 @@ export const getGroupVersionKindForModel = jest.fn((model: { apiGroup: string; a
   version: model.apiVersion,
   kind: model.kind,
 }));
+
+export const ResourceIcon: FC<{ groupVersionKind?: object }> = () =>
+  createElement('span', { 'data-test': 'resource-icon' });
+
+/** Renders tab names and the first page component so details Overview can be asserted in unit tests. */
+export const HorizontalNav: FC<{
+  pages: Array<{ name: string; href?: string; component: FC<{ obj?: unknown }> }>;
+  resource?: unknown;
+}> = ({ pages, resource }) => {
+  const FirstPage = pages[0]?.component;
+  return createElement(
+    'div',
+    { 'data-test': 'horizontal-nav' },
+    ...pages.map((page) => createElement('span', { key: page.name, 'data-test': `nav-tab-${page.name}` }, page.name)),
+    FirstPage ? createElement(FirstPage, { obj: resource }) : null,
+  );
+};

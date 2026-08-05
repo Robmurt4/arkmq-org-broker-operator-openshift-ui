@@ -271,3 +271,99 @@ test.describe('BrokerService List Page', () => {
     await expect(page.locator('h1')).toContainText(LIST_SERVICE_NAME);
   });
 });
+
+test.describe('BrokerService Details Page', () => {
+  const DETAILS_NAMESPACE = 'broker-service-details-e2e';
+  const DETAILS_SERVICE_NAME = 'details-test-broker';
+
+  async function openBrokerServiceDetailsFromList(page: Page) {
+    await gotoBrokerServiceList(page, DETAILS_NAMESPACE);
+    await page
+      .locator(`[data-test="broker-service-link-${DETAILS_NAMESPACE}-${DETAILS_SERVICE_NAME}"]`)
+      .click();
+    await page.waitForURL(
+      new RegExp(`/k8s/ns/${DETAILS_NAMESPACE}/.*${DETAILS_SERVICE_NAME}(?!.*~new)`),
+      { timeout: 30000 },
+    );
+    await expect(page.locator('[data-test="broker-service-details-title"]')).toContainText(
+      DETAILS_SERVICE_NAME,
+    );
+    await expect(page.locator('[data-test="resource-details-favorite-button"]')).toBeVisible();
+    await expect(
+      page.locator(
+        `[data-test="broker-service-details-actions-${DETAILS_NAMESPACE}-${DETAILS_SERVICE_NAME}"]`,
+      ),
+    ).toBeVisible();
+  }
+
+  test.beforeAll(() => {
+    createNamespace(DETAILS_NAMESPACE);
+    console.log('\nStarting BrokerService Details Page tests\n');
+  });
+
+  test.afterAll(() => {
+    kubectl(`delete brokerservice --all -n ${DETAILS_NAMESPACE}`, { ignoreError: true });
+    deleteNamespace(DETAILS_NAMESPACE);
+    console.log('\nDetails page cleanup complete\n');
+  });
+
+  test.afterEach(() => {
+    kubectl(`delete brokerservice --all -n ${DETAILS_NAMESPACE}`, { ignoreError: true });
+  });
+
+  test('navigates from list to Overview and displays labels from cluster', async ({ page }) => {
+    applyYaml(
+      brokerServiceYaml(DETAILS_SERVICE_NAME, DETAILS_NAMESPACE, {
+        tier: 'e2e',
+        app: 'messaging',
+      }),
+    );
+    await waitForCondition(
+      'brokerservice',
+      DETAILS_SERVICE_NAME,
+      DETAILS_NAMESPACE,
+      'Valid',
+      'True',
+      120000,
+    );
+
+    await login(page, username, password);
+    await openBrokerServiceDetailsFromList(page);
+
+    await expect(page.locator('[data-test="broker-service-details-breadcrumb"]')).toBeVisible();
+    await expect(
+      page.locator(
+        `[data-test="broker-service-details-status-${DETAILS_NAMESPACE}-${DETAILS_SERVICE_NAME}"]`,
+      ),
+    ).toBeVisible();
+    await expect(page.locator('[data-test="broker-service-overview-tab"]')).toBeVisible();
+
+    // Labels come from the cluster CR — worth checking once in E2E.
+    await expect(page.locator('[data-test="resource-labels-and-annotations"]')).toBeVisible();
+    await expect(page.getByText('tier=e2e')).toBeVisible();
+    await expect(page.getByText('app=messaging')).toBeVisible();
+  });
+
+  test('switches between details tabs', async ({ page }) => {
+    applyYaml(brokerServiceYaml(DETAILS_SERVICE_NAME, DETAILS_NAMESPACE));
+    await waitForCondition(
+      'brokerservice',
+      DETAILS_SERVICE_NAME,
+      DETAILS_NAMESPACE,
+      'Valid',
+      'True',
+      120000,
+    );
+
+    await login(page, username, password);
+    await openBrokerServiceDetailsFromList(page);
+
+    await expect(page.locator('[data-test="broker-service-overview-tab"]')).toBeVisible();
+
+    await page.getByRole('tab', { name: 'YAML' }).click();
+    await expect(page.locator('[data-test="broker-service-yaml-tab"]')).toBeVisible();
+
+    await page.getByRole('tab', { name: 'Overview' }).click();
+    await expect(page.locator('[data-test="broker-service-overview-tab"]')).toBeVisible();
+  });
+});
