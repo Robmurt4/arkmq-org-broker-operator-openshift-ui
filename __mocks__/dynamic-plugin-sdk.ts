@@ -74,3 +74,6 @@ export const HorizontalNav: FC<{
     FirstPage ? createElement(FirstPage, { obj: resource }) : null,
   );
 };
+
+export const ResourceYAMLEditor: FC<{ initialResource: object; create?: boolean }> = () =>
+  createElement('div', { 'data-test': 'resource-yaml-editor' });

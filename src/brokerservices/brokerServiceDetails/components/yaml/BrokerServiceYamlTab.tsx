@@ -1,19 +1,34 @@
 import type { FC } from 'react';
-import { EmptyState, EmptyStateBody, PageSection } from '@patternfly/react-core';
+import { Suspense } from 'react';
+import { ResourceYAMLEditor } from '@openshift-console/dynamic-plugin-sdk';
+import { PageSection, Spinner } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
+import type { BrokerService } from '../../../../k8s/types';
+import '../../../../shared-components/yaml-editor-wrapper.css';
+
+export interface BrokerServiceYamlTabProps {
+  /** Watched BrokerService CR passed through HorizontalNav. */
+  obj?: BrokerService;
+}
 
 /**
- * Placeholder YAML tab for BrokerService details.
- * A read-only YAML view can replace this stub in a later commit.
+ * Editable YAML tab for BrokerService details.
+ * Edit BrokerService from the list opens this tab via the /yaml route.
  */
-export const BrokerServiceYamlTab: FC = () => {
+export const BrokerServiceYamlTab: FC<BrokerServiceYamlTabProps> = ({ obj }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
+
+  if (!obj) {
+    return null;
+  }
 
   return (
     <PageSection data-test="broker-service-yaml-tab">
-      <EmptyState headingLevel="h2" titleText={t('YAML')}>
-        <EmptyStateBody>{t('YAML editor will appear here.')}</EmptyStateBody>
-      </EmptyState>
+      <div className="plugin__arkmq-org-broker-operator-openshift-ui__yaml-editor-wrapper plugin__arkmq-org-broker-operator-openshift-ui__yaml-editor-wrapper--details">
+        <Suspense fallback={<Spinner aria-label={t('Loading editor')} />}>
+          <ResourceYAMLEditor initialResource={obj} />
+        </Suspense>
+      </div>
     </PageSection>
   );
 };
