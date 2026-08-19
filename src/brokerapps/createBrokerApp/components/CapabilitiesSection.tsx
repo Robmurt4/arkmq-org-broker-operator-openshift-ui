@@ -71,28 +71,6 @@ export const CapabilitiesSection: React.FC = () => {
           placeholder={t('e.g., payments.pending')}
         />
       </FormGroup>
-
-      <FormGroup label={t('Subscribes To')} fieldId="brokerapp-subscribes">
-        <FormHelperText>
-          <HelperText>
-            <HelperTextItem>
-              {t('Topic addresses your application will subscribe to (publish-subscribe).')}
-            </HelperTextItem>
-          </HelperText>
-        </FormHelperText>
-        <AddressListInput
-          inputId="brokerapp-subscribes"
-          categoryName={t('Subscribes To')}
-          addresses={state.subscriberOf}
-          onAdd={(addr) => {
-            dispatch({ type: 'ADD_ADDRESS', field: 'subscriberOf', payload: addr });
-          }}
-          onRemove={(addr) => {
-            dispatch({ type: 'REMOVE_ADDRESS', field: 'subscriberOf', payload: addr });
-          }}
-          placeholder={t('e.g., notifications.global')}
-        />
-      </FormGroup>
     </FormSection>
   );
 };

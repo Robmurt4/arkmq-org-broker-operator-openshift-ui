@@ -8,14 +8,13 @@ export interface MatchLabel {
   value: string;
 }
 
-export type AddressField = 'producerOf' | 'consumerOf' | 'subscriberOf';
+export type AddressField = 'producerOf' | 'consumerOf';
 
 export interface BrokerAppFormState {
   cr: BrokerAppCR;
   matchLabels: MatchLabel[];
   producerOf: string[];
   consumerOf: string[];
-  subscriberOf: string[];
 }
 
 export type BrokerAppFormAction =
@@ -32,12 +31,10 @@ export type BrokerAppFormAction =
 const buildCapabilities = (
   producerOf: string[],
   consumerOf: string[],
-  subscriberOf: string[],
 ): BrokerAppCapability[] | undefined => {
   const cap: BrokerAppCapability = {};
   if (producerOf.length) cap.producerOf = producerOf.map((a) => ({ address: a }));
   if (consumerOf.length) cap.consumerOf = consumerOf.map((a) => ({ address: a }));
-  if (subscriberOf.length) cap.subscriberOf = subscriberOf.map((a) => ({ address: a }));
   return Object.keys(cap).length ? [cap] : undefined;
 };
 
@@ -93,10 +90,9 @@ const buildSpec = (
   matchLabels: MatchLabel[],
   producerOf: string[],
   consumerOf: string[],
-  subscriberOf: string[],
 ): BrokerAppSpec => {
   const resolvedMatchLabels = buildMatchLabels(matchLabels);
-  const capabilities = buildCapabilities(producerOf, consumerOf, subscriberOf);
+  const capabilities = buildCapabilities(producerOf, consumerOf);
   const spec: BrokerAppSpec = {};
   if (resolvedMatchLabels) spec.selector = { matchLabels: resolvedMatchLabels };
   if (capabilities) spec.capabilities = capabilities;
@@ -126,19 +122,13 @@ export const brokerAppReducer = (
       const newArrays = {
         producerOf: action.field === 'producerOf' ? updated : state.producerOf,
         consumerOf: action.field === 'consumerOf' ? updated : state.consumerOf,
-        subscriberOf: action.field === 'subscriberOf' ? updated : state.subscriberOf,
       };
       return {
         ...state,
         ...newArrays,
         cr: {
           ...state.cr,
-          spec: buildSpec(
-            state.matchLabels,
-            newArrays.producerOf,
-            newArrays.consumerOf,
-            newArrays.subscriberOf,
-          ),
+          spec: buildSpec(state.matchLabels, newArrays.producerOf, newArrays.consumerOf),
         },
       };
     }
@@ -148,19 +138,13 @@ export const brokerAppReducer = (
       const newArrays = {
         producerOf: action.field === 'producerOf' ? updated : state.producerOf,
         consumerOf: action.field === 'consumerOf' ? updated : state.consumerOf,
-        subscriberOf: action.field === 'subscriberOf' ? updated : state.subscriberOf,
       };
       return {
         ...state,
         ...newArrays,
         cr: {
           ...state.cr,
-          spec: buildSpec(
-            state.matchLabels,
-            newArrays.producerOf,
-            newArrays.consumerOf,
-            newArrays.subscriberOf,
-          ),
+          spec: buildSpec(state.matchLabels, newArrays.producerOf, newArrays.consumerOf),
         },
       };
     }
@@ -178,7 +162,7 @@ export const brokerAppReducer = (
         matchLabels,
         cr: {
           ...state.cr,
-          spec: buildSpec(matchLabels, state.producerOf, state.consumerOf, state.subscriberOf),
+          spec: buildSpec(matchLabels, state.producerOf, state.consumerOf),
         },
       };
     }
@@ -194,7 +178,7 @@ export const brokerAppReducer = (
         matchLabels,
         cr: {
           ...state.cr,
-          spec: buildSpec(matchLabels, state.producerOf, state.consumerOf, state.subscriberOf),
+          spec: buildSpec(matchLabels, state.producerOf, state.consumerOf),
         },
       };
     }
@@ -214,13 +198,11 @@ export const brokerAppReducer = (
               mergedMatchLabels,
               addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
               addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
-              addressesFromCapabilities(newCr.spec.capabilities, 'subscriberOf'),
             ),
           },
           matchLabels: mergedMatchLabels,
           producerOf: addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
           consumerOf: addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
-          subscriberOf: addressesFromCapabilities(newCr.spec.capabilities, 'subscriberOf'),
         };
       }
       return {
@@ -229,7 +211,6 @@ export const brokerAppReducer = (
         matchLabels: matchLabelsFromRecord(newCr.spec.selector?.matchLabels),
         producerOf: addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
         consumerOf: addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
-        subscriberOf: addressesFromCapabilities(newCr.spec.capabilities, 'subscriberOf'),
       };
     }
 
@@ -248,7 +229,6 @@ export const createInitialBrokerAppState = (namespace: string): BrokerAppFormSta
   matchLabels: [{ id: String(Date.now()), key: '', value: '' }],
   producerOf: [],
   consumerOf: [],
-  subscriberOf: [],
 });
 
 export const BrokerAppFormStateContext = createContext<BrokerAppFormState | undefined>(undefined);

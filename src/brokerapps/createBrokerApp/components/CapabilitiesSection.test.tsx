@@ -22,11 +22,6 @@ const makeStateWithAddresses = (): BrokerAppFormState => {
     field: 'consumerOf',
     payload: 'QUEUE.IN',
   });
-  state = brokerAppReducer(state, {
-    type: 'ADD_ADDRESS',
-    field: 'subscriberOf',
-    payload: 'TOPIC.EVENTS',
-  });
   return state;
 };
 
@@ -47,12 +42,11 @@ const CapabilitiesSectionWrapper: React.FC<{ initialState?: BrokerAppFormState }
 };
 
 describe('CapabilitiesSection', () => {
-  it('renders existing producerOf, consumerOf, and subscriberOf addresses from state', () => {
+  it('renders existing producerOf and consumerOf addresses from state', () => {
     render(<CapabilitiesSectionWrapper initialState={makeStateWithAddresses()} />);
 
     expect(screen.getByText('QUEUE.OUT')).toBeInTheDocument();
     expect(screen.getByText('QUEUE.IN')).toBeInTheDocument();
-    expect(screen.getByText('TOPIC.EVENTS')).toBeInTheDocument();
   });
 
   it('adding an address to producerOf updates the label group', () => {
@@ -68,7 +62,7 @@ describe('CapabilitiesSection', () => {
     expect(within(producerList).getByText('QUEUE.ORDERS')).toBeInTheDocument();
   });
 
-  it('adding an address to consumerOf does not affect producerOf or subscriberOf', () => {
+  it('adding an address to consumerOf does not affect producerOf', () => {
     render(<CapabilitiesSectionWrapper />);
 
     const consumerList = screen.getByRole('list', { name: 'Consumes From' });
@@ -81,19 +75,6 @@ describe('CapabilitiesSection', () => {
     expect(within(consumerList).getByText('QUEUE.PAYMENTS')).toBeInTheDocument();
 
     const producerList = screen.getByRole('list', { name: 'Produces To' });
-    const subscriberList = screen.getByRole('list', { name: 'Subscribes To' });
     expect(within(producerList).queryByText('QUEUE.PAYMENTS')).not.toBeInTheDocument();
-    expect(within(subscriberList).queryByText('QUEUE.PAYMENTS')).not.toBeInTheDocument();
-  });
-
-  it('removing a subscriberOf address removes only that label', () => {
-    render(<CapabilitiesSectionWrapper initialState={makeStateWithAddresses()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Remove TOPIC.EVENTS' }));
-
-    expect(screen.queryByText('TOPIC.EVENTS')).not.toBeInTheDocument();
-    // Other addresses are untouched
-    expect(screen.getByText('QUEUE.OUT')).toBeInTheDocument();
-    expect(screen.getByText('QUEUE.IN')).toBeInTheDocument();
   });
 });

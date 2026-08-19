@@ -12,7 +12,6 @@ export interface MatchAddress {
 export interface BrokerAppCapability {
   producerOf?: MatchAddress[];
   consumerOf?: MatchAddress[];
-  subscriberOf?: MatchAddress[];
 }
 
 export interface BrokerAppSpec {
