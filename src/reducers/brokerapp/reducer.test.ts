@@ -67,22 +67,16 @@ describe('brokerAppReducer', () => {
     expect(producerOf.map((p) => p.address)).toEqual(['QUEUE.KEEP']);
   });
 
-  it('ADD_ADDRESS builds consumerOf and subscriberOf in spec', () => {
+  it('ADD_ADDRESS builds consumerOf in spec', () => {
     let state = createInitialBrokerAppState(ns);
     state = brokerAppReducer(state, {
       type: 'ADD_ADDRESS',
       field: 'consumerOf',
       payload: 'QUEUE.PAYMENTS',
     });
-    state = brokerAppReducer(state, {
-      type: 'ADD_ADDRESS',
-      field: 'subscriberOf',
-      payload: 'TOPIC.EVENTS',
-    });
 
     const cap = state.cr.spec.capabilities?.[0] ?? {};
     expect(cap.consumerOf?.map((a) => a.address)).toContain('QUEUE.PAYMENTS');
-    expect(cap.subscriberOf?.map((a) => a.address)).toContain('TOPIC.EVENTS');
   });
 
   it('REMOVE_MATCH_LABEL removes the label from spec.selector.matchLabels', () => {
@@ -245,7 +239,6 @@ describe('brokerAppReducer', () => {
             {
               producerOf: [{ address: 'QUEUE.OUT' }],
               consumerOf: [{ address: 'QUEUE.IN' }],
-              subscriberOf: [{ address: 'TOPIC.EVENTS' }],
             },
           ],
         },
@@ -260,7 +253,6 @@ describe('brokerAppReducer', () => {
     );
     expect(state.producerOf).toEqual(['QUEUE.OUT']);
     expect(state.consumerOf).toEqual(['QUEUE.IN']);
-    expect(state.subscriberOf).toEqual(['TOPIC.EVENTS']);
   });
 
   it('SET_MODEL with empty spec produces a single blank matchLabel row', () => {
@@ -279,7 +271,6 @@ describe('brokerAppReducer', () => {
     expect(state.matchLabels[0].value).toBe('');
     expect(state.producerOf).toEqual([]);
     expect(state.consumerOf).toEqual([]);
-    expect(state.subscriberOf).toEqual([]);
   });
 });
 
