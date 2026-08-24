@@ -142,7 +142,7 @@ jobs:
       - name: Set up CRC
         uses: crc-org/crc-github-action@v1.0.1
         with:
-          version: 2.54.0
+          version: 2.63.0
           pull-secret: ${{ secrets.CRC_PULL_SECRET }}
           cache: false
           preset: openshift
@@ -183,7 +183,7 @@ jobs:
 
       - name: Install cert-manager
         run: |
-          oc apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.2/cert-manager.yaml
+          oc apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.1/cert-manager.yaml
           oc wait pod --all --for=condition=Ready --namespace=cert-manager --timeout=30m
 
       - name: Wait for cert-manager webhook endpoint
