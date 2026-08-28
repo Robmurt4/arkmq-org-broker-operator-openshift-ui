@@ -1,3 +1,5 @@
+import type { PrivateAddress } from '../k8s/types';
+
 export const validateDNS1123 = (value: string): string | null => {
   if (!value) return 'Name is required';
   if (value.length > 253) return 'Name must be 253 characters or fewer';
@@ -108,6 +110,67 @@ export const validateYamlDuplicateKeysInMapping = (
   }
 
   return null;
+};
+
+// validates each private address is not empty or exclusively white space.
+export const validatePrivateAddressEntries = (entries: PrivateAddress[]): (string | undefined)[] =>
+  entries.map((e) => (e.address.trim() ? undefined : 'Address is required'));
+
+/**
+ * Marks the second and subsequent occurrences of duplicate non-empty addresses.
+ * The first occurrence is not flagged — only later repeats get an error.
+ * Blank entries are skipped (handled by validatePrivateAddressEntries).
+ *
+ * @param entries - Address entries from spec.addresses or spec.sharedAddresses
+ * @returns Per-entry error or undefined, parallel to the input array
+ */
+export const validateDuplicateAddressEntries = (
+  entries: PrivateAddress[],
+): (string | undefined)[] => {
+  const seen = new Set<string>();
+  return entries.map((e) => {
+    const trimmed = e.address.trim();
+    if (!trimmed) return undefined;
+    if (seen.has(trimmed)) return 'Duplicate address';
+    seen.add(trimmed);
+    return undefined;
+  });
+};
+
+/**
+ * Rejects duplicate non-empty address names within a single address list.
+ * Empty/whitespace entries are skipped — validatePrivateAddressEntries handles those.
+ *
+ * @param entries - Address entries from either spec.addresses or spec.sharedAddresses
+ * @returns Error naming the first duplicate, or null when all entries are unique
+ */
+export const validateNoDuplicateAddresses = (entries: PrivateAddress[]): string | null => {
+  const seen = new Set<string>();
+  for (const { address } of entries) {
+    const trimmed = address.trim();
+    if (!trimmed) continue;
+    if (seen.has(trimmed)) {
+      return `Duplicate address "${trimmed}"`;
+    }
+    seen.add(trimmed);
+  }
+  return null;
+};
+
+// TODO: i18n — this returns an interpolated English string; callers throw it as an Error
+// so it bypasses t(). To translate, return the overlap address separately and let the call site
+// build the message with t() interpolation.
+// Ensures no address is in both spec.addresses and spec.sharedAddresses; if so returns error naming first overlapping address, else null.
+export const validateNoAddressOverlap = (
+  privateAddresses: string[],
+  sharedAddresses: string[],
+): string | null => {
+  const sharedSet = new Set(sharedAddresses.map((a) => a.trim()));
+  const overlap = privateAddresses.map((a) => a.trim()).find((a) => a && sharedSet.has(a));
+
+  return overlap
+    ? `Address "${overlap}" cannot appear in both spec.addresses and spec.sharedAddresses`
+    : null;
 };
 
 export const validateYamlDuplicateBrokerServiceLabels = (yamlContent: string): string | null =>
