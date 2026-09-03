@@ -1,4 +1,5 @@
 import {
+  validateAddressOverlapEntries,
   validateDNS1123,
   validateDuplicateAddressEntries,
   validateLabelEntries,
@@ -331,5 +332,35 @@ describe('validateNoAddressOverlap', () => {
 
   it('ignores empty/whitespace-only entries when checking overlap', () => {
     expect(validateNoAddressOverlap(['', '   '], ['', '   '])).toBeNull();
+  });
+});
+
+describe('validateAddressOverlapEntries', () => {
+  it('returns all undefined when no overlap exists', () => {
+    expect(
+      validateAddressOverlapEntries([{ address: 'a' }, { address: 'b' }], [{ address: 'c' }]),
+    ).toEqual([undefined, undefined]);
+  });
+
+  it('flags entries that appear in the other list', () => {
+    expect(
+      validateAddressOverlapEntries([{ address: 'a' }, { address: 'b' }], [{ address: 'b' }]),
+    ).toEqual([undefined, 'Address exists in both private and shared lists']);
+  });
+
+  it('skips blank entries', () => {
+    expect(validateAddressOverlapEntries([{ address: '' }], [{ address: '' }])).toEqual([
+      undefined,
+    ]);
+  });
+
+  it('detects overlap when addresses differ only by whitespace', () => {
+    expect(
+      validateAddressOverlapEntries([{ address: '  orders  ' }], [{ address: 'orders' }]),
+    ).toEqual(['Address exists in both private and shared lists']);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(validateAddressOverlapEntries([], [{ address: 'a' }])).toEqual([]);
   });
 });

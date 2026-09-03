@@ -9,12 +9,23 @@ import {
 } from '../../../reducers/brokerapp/reducer';
 import { AddressManager } from './AddressManager';
 
-const Wrapper: React.FC = () => {
+const PrivateWrapper: React.FC = () => {
   const [state, dispatch] = useReducer(brokerAppReducer, createInitialBrokerAppState('default'));
   return (
     <BrokerAppFormStateContext.Provider value={state}>
       <BrokerAppFormDispatchContext.Provider value={dispatch}>
-        <AddressManager />
+        <AddressManager addressKind="private" />
+      </BrokerAppFormDispatchContext.Provider>
+    </BrokerAppFormStateContext.Provider>
+  );
+};
+
+const SharedWrapper: React.FC = () => {
+  const [state, dispatch] = useReducer(brokerAppReducer, createInitialBrokerAppState('default'));
+  return (
+    <BrokerAppFormStateContext.Provider value={state}>
+      <BrokerAppFormDispatchContext.Provider value={dispatch}>
+        <AddressManager addressKind="shared" />
       </BrokerAppFormDispatchContext.Provider>
     </BrokerAppFormStateContext.Provider>
   );
@@ -32,8 +43,8 @@ const addSub = (name: string) => {
   fireEvent.keyDown(input, { key: 'Enter' });
 };
 
-describe('AddressManager — add and remove entries', () => {
-  beforeEach(() => render(<Wrapper />));
+describe('AddressManager (private) — add and remove entries', () => {
+  beforeEach(() => render(<PrivateWrapper />));
 
   it('renders no address inputs before any entry is added', () => {
     expect(screen.queryByTestId('private-address-input-0')).not.toBeInTheDocument();
@@ -90,9 +101,9 @@ describe('AddressManager — add and remove entries', () => {
   });
 });
 
-describe('AddressManager — pubSub toggle', () => {
+describe('AddressManager (private) — pubSub toggle', () => {
   beforeEach(() => {
-    render(<Wrapper />);
+    render(<PrivateWrapper />);
     fireEvent.click(screen.getByTestId('add-private-address-btn'));
   });
 
@@ -124,7 +135,7 @@ describe('AddressManager — pubSub toggle', () => {
 
 describe('SubscriptionListInput — add subscriptions', () => {
   beforeEach(() => {
-    render(<Wrapper />);
+    render(<PrivateWrapper />);
     addEntryWithPubSub();
   });
 
@@ -171,7 +182,7 @@ describe('SubscriptionListInput — add subscriptions', () => {
 
 describe('SubscriptionListInput — remove subscriptions', () => {
   beforeEach(() => {
-    render(<Wrapper />);
+    render(<PrivateWrapper />);
     addEntryWithPubSub();
   });
 
@@ -190,8 +201,8 @@ describe('SubscriptionListInput — remove subscriptions', () => {
   });
 });
 
-describe('AddressManager — duplicate address validation', () => {
-  beforeEach(() => render(<Wrapper />));
+describe('AddressManager (private) — duplicate address validation', () => {
+  beforeEach(() => render(<PrivateWrapper />));
 
   it('shows a duplicate error on the second entry after blurring with the same address', () => {
     fireEvent.click(screen.getByTestId('add-private-address-btn'));
@@ -235,9 +246,9 @@ describe('AddressManager — duplicate address validation', () => {
   });
 });
 
-describe('AddressManager — address required validation', () => {
+describe('AddressManager (private) — address required validation', () => {
   beforeEach(() => {
-    render(<Wrapper />);
+    render(<PrivateWrapper />);
     fireEvent.click(screen.getByTestId('add-private-address-btn'));
   });
 
@@ -267,5 +278,53 @@ describe('AddressManager — address required validation', () => {
       target: { value: '' },
     });
     expect(screen.getByText('Address is required')).toBeInTheDocument();
+  });
+});
+
+describe('AddressManager (shared) — add and remove entries', () => {
+  beforeEach(() => render(<SharedWrapper />));
+
+  it('renders the Shared Addresses section title', () => {
+    expect(screen.getByText('Shared Addresses')).toBeInTheDocument();
+  });
+
+  it('renders no address inputs before any entry is added', () => {
+    expect(screen.queryByTestId('shared-address-input-0')).not.toBeInTheDocument();
+  });
+
+  it('renders an address input after clicking Add shared address', () => {
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    expect(screen.getByTestId('shared-address-input-0')).toBeInTheDocument();
+  });
+
+  it('removes the entry after clicking the remove button', () => {
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.click(screen.getByTestId('remove-shared-address-0'));
+    expect(screen.queryByTestId('shared-address-input-0')).not.toBeInTheDocument();
+  });
+
+  it('reflects a typed value in the address input', () => {
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.change(screen.getByTestId('shared-address-input-0'), {
+      target: { value: 'orders.shared' },
+    });
+    expect(screen.getByTestId('shared-address-input-0')).toHaveValue('orders.shared');
+  });
+});
+
+describe('AddressManager (shared) — duplicate address validation', () => {
+  beforeEach(() => render(<SharedWrapper />));
+
+  it('shows a duplicate error on the second entry after blurring with the same address', () => {
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.change(screen.getByTestId('shared-address-input-0'), {
+      target: { value: 'orders.shared' },
+    });
+    fireEvent.change(screen.getByTestId('shared-address-input-1'), {
+      target: { value: 'orders.shared' },
+    });
+    fireEvent.blur(screen.getByTestId('shared-address-input-1'));
+    expect(screen.getByText('Duplicate address')).toBeInTheDocument();
   });
 });

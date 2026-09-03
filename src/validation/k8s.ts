@@ -138,6 +138,28 @@ export const validateDuplicateAddressEntries = (
 };
 
 /**
+ * Flags entries whose address already appears in the other address list.
+ * Used to surface inline overlap errors on the form — the submit-level
+ * validateNoAddressOverlap guard catches the same condition but does not
+ * tell the user which field is the problem.
+ *
+ * @param entries - The address list being validated
+ * @param otherEntries - The opposing list (private vs shared)
+ * @returns Per-entry error or undefined, parallel to the input array
+ */
+export const validateAddressOverlapEntries = (
+  entries: PrivateAddress[],
+  otherEntries: PrivateAddress[],
+): (string | undefined)[] => {
+  const otherSet = new Set(otherEntries.map((e) => e.address.trim()).filter(Boolean));
+  return entries.map((e) => {
+    const trimmed = e.address.trim();
+    if (!trimmed) return undefined;
+    return otherSet.has(trimmed) ? 'Address exists in both private and shared lists' : undefined;
+  });
+};
+
+/**
  * Rejects duplicate non-empty address names within a single address list.
  * Empty/whitespace entries are skipped — validatePrivateAddressEntries handles those.
  *

@@ -143,7 +143,8 @@ export default function CreateBrokerAppPage() {
               }}
             >
               <GeneralDetailsSection namespace={namespace} />
-              <AddressManager />
+              <AddressManager addressKind="private" />
+              <AddressManager addressKind="shared" />
               <SelectorSection namespace={namespace} />
               <CapabilitiesSection />
             </ResourceFormEditor>

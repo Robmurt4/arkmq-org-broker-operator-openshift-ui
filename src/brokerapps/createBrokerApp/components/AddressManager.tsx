@@ -18,6 +18,7 @@ import {
   TextInput,
 } from '@patternfly/react-core';
 import { PlusCircleIcon, TimesIcon } from '@patternfly/react-icons';
+import type { AddressKind } from '../../../reducers/brokerapp/reducer';
 import {
   useBrokerAppFormDispatch,
   useBrokerAppFormState,
@@ -25,41 +26,46 @@ import {
 import {
   validatePrivateAddressEntries,
   validateDuplicateAddressEntries,
+  validateAddressOverlapEntries,
 } from '../../../validation/k8s';
 
-/** The address list this manager targets. Passed down to SubscriptionListInput
- *  so it can dispatch ADD_SUBSCRIPTION / REMOVE_SUBSCRIPTION without knowing
- *  which list it belongs to. */
-const ADDRESS_KIND = 'private' as const;
-
 /**
- * Form section for managing the BrokerApp's private addresses (spec.addresses[]).
- * Private addresses are owned exclusively by this app — the operator rejects
- * any other app that references them. Each entry supports an optional pub/sub
- * toggle and a list of durable subscription queue names.
+ * Form section for managing BrokerApp address entries. Renders either the
+ * private (spec.addresses) or shared (spec.sharedAddresses) list depending
+ * on the addressKind prop. Each entry supports an optional pub/sub toggle
+ * and a list of durable subscription queue names.
  */
-export const AddressManager: React.FC = () => {
+export const AddressManager: React.FC<{ addressKind: AddressKind }> = ({ addressKind }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const state = useBrokerAppFormState();
   const dispatch = useBrokerAppFormDispatch();
+  const isPrivate = addressKind === 'private';
+  const entries = isPrivate ? state.privateAddresses : state.sharedAddresses;
+  const testPrefix = isPrivate ? 'private-address' : 'shared-address';
 
-  const requiredErrors = validatePrivateAddressEntries(state.privateAddresses);
-  const duplicateErrors = validateDuplicateAddressEntries(state.privateAddresses);
-  const errors = requiredErrors.map((e, i) => e ?? duplicateErrors[i]);
+  const otherEntries = isPrivate ? state.sharedAddresses : state.privateAddresses;
+  const requiredErrors = validatePrivateAddressEntries(entries);
+  const duplicateErrors = validateDuplicateAddressEntries(entries);
+  const overlapErrors = validateAddressOverlapEntries(entries, otherEntries);
+  const errors = requiredErrors.map((e, i) => e ?? duplicateErrors[i] ?? overlapErrors[i]);
   const [touched, setTouched] = useState<Set<number>>(new Set());
 
   return (
-    <FormSection title={t('Private Addresses')}>
+    <FormSection title={isPrivate ? t('Private Addresses') : t('Shared Addresses')}>
       <HelperText>
         <HelperTextItem>
-          {t(
-            'Addresses owned exclusively by this app. Other apps cannot reference these — to share an address, add it to spec.sharedAddresses instead.',
-          )}
+          {isPrivate
+            ? t(
+                'Addresses owned exclusively by this app. Other apps cannot reference these — to share an address, add it to spec.sharedAddresses instead.',
+              )
+            : t(
+                'Addresses shared across multiple apps. Any app referencing the same shared address can send or receive messages on it.',
+              )}
         </HelperTextItem>
       </HelperText>
 
       <Stack hasGutter>
-        {state.privateAddresses.map((entry, index) => (
+        {entries.map((entry, index) => (
           <StackItem key={index}>
             <Stack hasGutter>
               <StackItem>
@@ -68,24 +74,26 @@ export const AddressManager: React.FC = () => {
                     <FormGroup
                       label={t('Address')}
                       isRequired
-                      fieldId={`private-address-${String(index)}`}
+                      fieldId={`${testPrefix}-${String(index)}`}
                     >
                       <TextInput
-                        id={`private-address-${String(index)}`}
+                        id={`${testPrefix}-${String(index)}`}
                         value={entry.address}
                         onChange={(_e, val) => {
                           dispatch({
                             type: 'UPDATE_ADDRESS_ENTRY',
-                            payload: { addressKind: ADDRESS_KIND, index, address: val },
+                            payload: { addressKind, index, address: val },
                           });
                         }}
                         onBlur={() => {
                           setTouched((prev) => new Set(prev).add(index));
                         }}
-                        placeholder={t('e.g., orders.private')}
+                        placeholder={
+                          isPrivate ? t('e.g., orders.private') : t('e.g., orders.shared')
+                        }
                         validated={touched.has(index) && errors[index] ? 'error' : 'default'}
                         isRequired
-                        data-test={`private-address-input-${String(index)}`}
+                        data-test={`${testPrefix}-input-${String(index)}`}
                       />
                       {touched.has(index) && errors[index] && (
                         <FormHelperText>
@@ -100,11 +108,13 @@ export const AddressManager: React.FC = () => {
                   <SplitItem style={{ paddingTop: 'var(--pf-v6-c-form__group-label--PaddingTop)' }}>
                     <Button
                       variant="plain"
-                      aria-label={t('Remove private address')}
+                      aria-label={
+                        isPrivate ? t('Remove private address') : t('Remove shared address')
+                      }
                       onClick={() => {
                         dispatch({
                           type: 'REMOVE_ADDRESS_ENTRY',
-                          payload: { addressKind: ADDRESS_KIND, index },
+                          payload: { addressKind, index },
                         });
                         setTouched((prev) => {
                           const next = new Set<number>();
@@ -116,7 +126,7 @@ export const AddressManager: React.FC = () => {
                         });
                       }}
                       icon={<TimesIcon />}
-                      data-test={`remove-private-address-${String(index)}`}
+                      data-test={`remove-${testPrefix}-${String(index)}`}
                     />
                   </SplitItem>
                 </Split>
@@ -124,16 +134,16 @@ export const AddressManager: React.FC = () => {
 
               <StackItem>
                 <Switch
-                  id={`private-address-pubsub-${String(index)}`}
+                  id={`${testPrefix}-pubsub-${String(index)}`}
                   label={entry.pubSub ? t('Publish / Subscribe') : t('Point-to-Point')}
                   isChecked={entry.pubSub ?? false}
                   onChange={(_e, checked) => {
                     dispatch({
                       type: 'UPDATE_ADDRESS_ENTRY',
-                      payload: { addressKind: ADDRESS_KIND, index, pubSub: checked },
+                      payload: { addressKind, index, pubSub: checked },
                     });
                   }}
-                  data-test={`private-address-pubsub-${String(index)}`}
+                  data-test={`${testPrefix}-pubsub-${String(index)}`}
                 />
               </StackItem>
 
@@ -141,7 +151,7 @@ export const AddressManager: React.FC = () => {
                 <StackItem>
                   <FormGroup
                     label={t('Subscriptions')}
-                    fieldId={`private-address-subscriptions-${String(index)}`}
+                    fieldId={`${testPrefix}-subscriptions-${String(index)}`}
                   >
                     <FormHelperText>
                       <HelperText>
@@ -151,7 +161,8 @@ export const AddressManager: React.FC = () => {
                       </HelperText>
                     </FormHelperText>
                     <SubscriptionListInput
-                      inputId={`private-address-subscriptions-${String(index)}`}
+                      inputId={`${testPrefix}-subscriptions-${String(index)}`}
+                      addressKind={addressKind}
                       addressIndex={index}
                       subscriptions={entry.subscriptions ?? []}
                     />
@@ -167,11 +178,11 @@ export const AddressManager: React.FC = () => {
             variant="link"
             icon={<PlusCircleIcon />}
             onClick={() => {
-              dispatch({ type: 'ADD_ADDRESS_ENTRY', payload: { addressKind: ADDRESS_KIND } });
+              dispatch({ type: 'ADD_ADDRESS_ENTRY', payload: { addressKind } });
             }}
-            data-test="add-private-address-btn"
+            data-test={`add-${testPrefix}-btn`}
           >
-            {t('Add private address')}
+            {isPrivate ? t('Add private address') : t('Add shared address')}
           </Button>
         </StackItem>
       </Stack>
@@ -190,9 +201,10 @@ export const AddressManager: React.FC = () => {
  */
 const SubscriptionListInput: React.FC<{
   inputId: string;
+  addressKind: AddressKind;
   addressIndex: number;
   subscriptions: string[];
-}> = ({ inputId, addressIndex, subscriptions }) => {
+}> = ({ inputId, addressKind, addressIndex, subscriptions }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const dispatch = useBrokerAppFormDispatch();
   const [inputValue, setInputValue] = useState('');
@@ -203,7 +215,7 @@ const SubscriptionListInput: React.FC<{
     if (trimmed && !subscriptions.includes(trimmed)) {
       dispatch({
         type: 'ADD_SUBSCRIPTION',
-        payload: { addressKind: ADDRESS_KIND, addressIndex, name: trimmed },
+        payload: { addressKind, addressIndex, name: trimmed },
       });
     }
     setInputValue('');
@@ -256,7 +268,7 @@ const SubscriptionListInput: React.FC<{
           onClose={() => {
             dispatch({
               type: 'REMOVE_SUBSCRIPTION',
-              payload: { addressKind: ADDRESS_KIND, addressIndex, name: sub },
+              payload: { addressKind, addressIndex, name: sub },
             });
           }}
           closeBtnAriaLabel={`${t('Remove')} ${sub}`}

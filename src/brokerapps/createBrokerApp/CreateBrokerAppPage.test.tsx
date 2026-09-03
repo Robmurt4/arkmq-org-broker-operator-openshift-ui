@@ -97,6 +97,57 @@ describe('CreateBrokerAppPage — isFormValid integration', () => {
     });
     expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
   });
+
+  it('disables the create button when a shared address entry is blank', () => {
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
+  });
+
+  it('re-enables the create button once a blank shared address is filled', () => {
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.change(screen.getByTestId('shared-address-input-0'), {
+      target: { value: 'orders.shared' },
+    });
+    expect(screen.getByTestId('brokerapp-create-btn')).not.toBeDisabled();
+  });
+
+  it('disables the create button when duplicate shared addresses exist', () => {
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.change(screen.getByTestId('shared-address-input-0'), {
+      target: { value: 'events' },
+    });
+    fireEvent.change(screen.getByTestId('shared-address-input-1'), {
+      target: { value: 'events' },
+    });
+    expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
+  });
+
+  it('disables the create button when the same address appears in both lists', () => {
+    fireEvent.click(screen.getByTestId('add-private-address-btn'));
+    fireEvent.change(screen.getByTestId('private-address-input-0'), {
+      target: { value: 'overlap' },
+    });
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.change(screen.getByTestId('shared-address-input-0'), {
+      target: { value: 'overlap' },
+    });
+    expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
+  });
+
+  it('shows overlap error on the overlapping entries after blur', () => {
+    fireEvent.click(screen.getByTestId('add-private-address-btn'));
+    fireEvent.change(screen.getByTestId('private-address-input-0'), {
+      target: { value: 'overlap' },
+    });
+    fireEvent.blur(screen.getByTestId('private-address-input-0'));
+    fireEvent.click(screen.getByTestId('add-shared-address-btn'));
+    fireEvent.change(screen.getByTestId('shared-address-input-0'), {
+      target: { value: 'overlap' },
+    });
+    fireEvent.blur(screen.getByTestId('shared-address-input-0'));
+    expect(screen.getAllByText('Address exists in both private and shared lists')).toHaveLength(2);
+  });
 });
 
 const buildYaml = (spec: Record<string, unknown>) =>
