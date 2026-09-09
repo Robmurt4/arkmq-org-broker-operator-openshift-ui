@@ -4,6 +4,7 @@ import {
   createInitialBrokerAppState,
   useBrokerAppFormState,
   useBrokerAppFormDispatch,
+  getAddresses,
 } from './reducer';
 
 describe('brokerAppReducer', () => {
@@ -150,7 +151,7 @@ describe('brokerAppReducer', () => {
     expect(next.matchLabels).toEqual(state.matchLabels);
     expect(next.cr.spec.selector?.matchLabels).toEqual({ key1: 'test' });
     expect(next.cr.metadata?.name).toBe('from-yaml');
-    expect(next.producerOf).toEqual(['QUEUE.OUT']);
+    expect(getAddresses(next.cr, 'producerOf')).toEqual(['QUEUE.OUT']);
   });
 
   it('SET_MODEL with preserveLabels merges new YAML-only match label keys into form rows', () => {
@@ -223,7 +224,7 @@ describe('brokerAppReducer', () => {
     });
 
     expect(state).toBe(stateBeforeDupe);
-    expect(state.producerOf).toHaveLength(1);
+    expect(getAddresses(state.cr, 'producerOf')).toHaveLength(1);
   });
 
   it('SET_MODEL populates matchLabels and address fields from an existing CR', () => {
@@ -251,8 +252,8 @@ describe('brokerAppReducer', () => {
         { key: 'tier', value: 'web' },
       ]),
     );
-    expect(state.producerOf).toEqual(['QUEUE.OUT']);
-    expect(state.consumerOf).toEqual(['QUEUE.IN']);
+    expect(getAddresses(state.cr, 'producerOf')).toEqual(['QUEUE.OUT']);
+    expect(getAddresses(state.cr, 'consumerOf')).toEqual(['QUEUE.IN']);
   });
 
   it('SET_MODEL with empty spec produces a single blank matchLabel row', () => {
@@ -269,8 +270,8 @@ describe('brokerAppReducer', () => {
     expect(state.matchLabels).toHaveLength(1);
     expect(state.matchLabels[0].key).toBe('');
     expect(state.matchLabels[0].value).toBe('');
-    expect(state.producerOf).toEqual([]);
-    expect(state.consumerOf).toEqual([]);
+    expect(getAddresses(state.cr, 'producerOf')).toEqual([]);
+    expect(getAddresses(state.cr, 'consumerOf')).toEqual([]);
   });
 });
 

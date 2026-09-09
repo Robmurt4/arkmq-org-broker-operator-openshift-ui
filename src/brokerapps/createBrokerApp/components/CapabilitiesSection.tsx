@@ -11,6 +11,7 @@ import { AddressListInput } from './AddressListInput';
 import {
   useBrokerAppFormState,
   useBrokerAppFormDispatch,
+  getAddresses,
 } from '../../../reducers/brokerapp/reducer';
 
 export const CapabilitiesSection: React.FC = () => {
@@ -39,7 +40,7 @@ export const CapabilitiesSection: React.FC = () => {
         <AddressListInput
           inputId="brokerapp-produces"
           categoryName={t('Produces To')}
-          addresses={state.producerOf}
+          addresses={getAddresses(state.cr, 'producerOf')}
           onAdd={(addr) => {
             dispatch({ type: 'ADD_ADDRESS', field: 'producerOf', payload: addr });
           }}
@@ -61,7 +62,7 @@ export const CapabilitiesSection: React.FC = () => {
         <AddressListInput
           inputId="brokerapp-consumes"
           categoryName={t('Consumes From')}
-          addresses={state.consumerOf}
+          addresses={getAddresses(state.cr, 'consumerOf')}
           onAdd={(addr) => {
             dispatch({ type: 'ADD_ADDRESS', field: 'consumerOf', payload: addr });
           }}
