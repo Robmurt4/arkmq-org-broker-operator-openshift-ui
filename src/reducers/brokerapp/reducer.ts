@@ -86,11 +86,12 @@ const addressesFromCapabilities = (
   return arr ? arr.map((a) => a.address) : [];
 };
 
-const buildSpec = (
-  matchLabels: MatchLabel[],
-  producerOf: string[],
-  consumerOf: string[],
-): BrokerAppSpec => {
+/**
+ * Derives spec from the form-level state fields.
+ * Called once at the reducer tail on the final next-state, so individual cases
+ * never need to thread positional argument lists manually.
+ */
+const buildSpec = ({ matchLabels, producerOf, consumerOf }: BrokerAppFormState): BrokerAppSpec => {
   const resolvedMatchLabels = buildMatchLabels(matchLabels);
   const capabilities = buildCapabilities(producerOf, consumerOf);
   const spec: BrokerAppSpec = {};
@@ -105,82 +106,43 @@ export const brokerAppReducer = (
   state: BrokerAppFormState,
   action: BrokerAppFormAction,
 ): BrokerAppFormState => {
+  let next = { ...state };
+
   switch (action.type) {
     case 'SET_NAME':
       return {
         ...state,
-        cr: {
-          ...state.cr,
-          metadata: { ...state.cr.metadata, name: action.payload },
-        },
+        cr: { ...state.cr, metadata: { ...state.cr.metadata, name: action.payload } },
       };
 
     case 'ADD_ADDRESS': {
-      const list = state[action.field];
-      if (list.includes(action.payload)) return state;
-      const updated = [...list, action.payload];
-      const newArrays = {
-        producerOf: action.field === 'producerOf' ? updated : state.producerOf,
-        consumerOf: action.field === 'consumerOf' ? updated : state.consumerOf,
-      };
-      return {
-        ...state,
-        ...newArrays,
-        cr: {
-          ...state.cr,
-          spec: buildSpec(state.matchLabels, newArrays.producerOf, newArrays.consumerOf),
-        },
-      };
+      if (state[action.field].includes(action.payload)) return state;
+      next[action.field] = [...state[action.field], action.payload];
+      break;
     }
 
     case 'REMOVE_ADDRESS': {
-      const updated = state[action.field].filter((a) => a !== action.payload);
-      const newArrays = {
-        producerOf: action.field === 'producerOf' ? updated : state.producerOf,
-        consumerOf: action.field === 'consumerOf' ? updated : state.consumerOf,
-      };
-      return {
-        ...state,
-        ...newArrays,
-        cr: {
-          ...state.cr,
-          spec: buildSpec(state.matchLabels, newArrays.producerOf, newArrays.consumerOf),
-        },
-      };
+      next[action.field] = state[action.field].filter((a) => a !== action.payload);
+      break;
     }
 
-    case 'ADD_MATCH_LABEL':
-      return {
-        ...state,
-        matchLabels: [...state.matchLabels, { id: String(Date.now()), key: '', value: '' }],
-      };
+    case 'ADD_MATCH_LABEL': {
+      next.matchLabels = [...state.matchLabels, { id: String(Date.now()), key: '', value: '' }];
+      break;
+    }
 
     case 'REMOVE_MATCH_LABEL': {
-      const matchLabels = state.matchLabels.filter((l) => l.id !== action.payload);
-      return {
-        ...state,
-        matchLabels,
-        cr: {
-          ...state.cr,
-          spec: buildSpec(matchLabels, state.producerOf, state.consumerOf),
-        },
-      };
+      next.matchLabels = state.matchLabels.filter((l) => l.id !== action.payload);
+      break;
     }
 
     case 'UPDATE_MATCH_LABEL': {
-      const matchLabels = state.matchLabels.map((l) =>
+      next.matchLabels = state.matchLabels.map((l) =>
         l.id === action.payload.id
           ? { ...l, key: action.payload.key, value: action.payload.value }
           : l,
       );
-      return {
-        ...state,
-        matchLabels,
-        cr: {
-          ...state.cr,
-          spec: buildSpec(matchLabels, state.producerOf, state.consumerOf),
-        },
-      };
+      break;
     }
 
     case 'SET_MODEL': {
@@ -190,33 +152,30 @@ export const brokerAppReducer = (
           state.matchLabels,
           newCr.spec.selector?.matchLabels,
         );
-        return {
+        next = {
           ...state,
-          cr: {
-            ...newCr,
-            spec: buildSpec(
-              mergedMatchLabels,
-              addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
-              addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
-            ),
-          },
           matchLabels: mergedMatchLabels,
           producerOf: addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
           consumerOf: addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
+          cr: newCr,
+        };
+      } else {
+        next = {
+          ...state,
+          matchLabels: matchLabelsFromRecord(newCr.spec.selector?.matchLabels),
+          producerOf: addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
+          consumerOf: addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
+          cr: newCr,
         };
       }
-      return {
-        ...state,
-        cr: newCr,
-        matchLabels: matchLabelsFromRecord(newCr.spec.selector?.matchLabels),
-        producerOf: addressesFromCapabilities(newCr.spec.capabilities, 'producerOf'),
-        consumerOf: addressesFromCapabilities(newCr.spec.capabilities, 'consumerOf'),
-      };
+      break;
     }
 
     default:
       return state;
   }
+
+  return { ...next, cr: { ...next.cr, spec: buildSpec(next) } };
 };
 
 export const createInitialBrokerAppState = (namespace: string): BrokerAppFormState => ({
@@ -226,7 +185,7 @@ export const createInitialBrokerAppState = (namespace: string): BrokerAppFormSta
     metadata: { name: 'my-messaging-app', namespace },
     spec: {},
   },
-  matchLabels: [{ id: String(Date.now()), key: '', value: '' }],
+  matchLabels: [{ id: String(Date.now()), key: '', value: '' }], // MatchLabel id is kept — it guards against duplicate key-entry collisions on rapid adds
   producerOf: [],
   consumerOf: [],
 });
