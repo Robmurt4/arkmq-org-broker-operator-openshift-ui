@@ -110,6 +110,59 @@ export const validateYamlDuplicateKeysInMapping = (
   return null;
 };
 
+// Per-entry required check — flags empty or whitespace-only address names.
+export const validateAddressEntries = (entries: { address: string }[]): (string | undefined)[] =>
+  entries.map((e) => (e.address.trim() ? undefined : 'Address is required'));
+
+/**
+ * Marks all occurrences of a duplicated non-empty address.
+ * Blank entries are skipped (handled by validateAddressEntries).
+ */
+export const validateDuplicateAddressEntries = (
+  entries: { address: string }[],
+): (string | undefined)[] => {
+  const counts = new Map<string, number>();
+  for (const e of entries) {
+    const trimmed = e.address.trim();
+    if (trimmed) counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+  }
+  return entries.map((e) => {
+    const trimmed = e.address.trim();
+    if (!trimmed) return undefined;
+    return (counts.get(trimmed) ?? 0) > 1 ? 'Duplicate address' : undefined;
+  });
+};
+
+//  Rejects duplicate non-empty address names within a single address list.
+export const validateNoDuplicateAddresses = (entries: { address: string }[]): string | null => {
+  const seen = new Set<string>();
+  for (const { address } of entries) {
+    const trimmed = address.trim();
+    if (!trimmed) continue;
+    if (seen.has(trimmed)) {
+      return `Duplicate address "${trimmed}"`;
+    }
+    seen.add(trimmed);
+  }
+  return null;
+};
+
+// TODO: i18n — this returns an interpolated English string; callers throw it as an Error
+// so it bypasses t(). To translate, return the overlap address separately and let the call site
+// build the message with t() interpolation.
+// Ensures no address is in both spec.addresses and spec.sharedAddresses; if so returns error naming first overlapping address, else null.
+export const validateNoAddressOverlap = (
+  privateAddresses: string[],
+  sharedAddresses: string[],
+): string | null => {
+  const sharedSet = new Set(sharedAddresses.map((a) => a.trim()));
+  const overlap = privateAddresses.map((a) => a.trim()).find((a) => a && sharedSet.has(a));
+
+  return overlap
+    ? `Address "${overlap}" cannot appear in both spec.addresses and spec.sharedAddresses`
+    : null;
+};
+
 export const validateYamlDuplicateBrokerServiceLabels = (yamlContent: string): string | null =>
   validateYamlDuplicateKeysInMapping(yamlContent, ['metadata', 'labels'], 'metadata.labels');
 

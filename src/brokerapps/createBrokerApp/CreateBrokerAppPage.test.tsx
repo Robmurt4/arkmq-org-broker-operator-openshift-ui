@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import * as jsYaml from 'js-yaml';
 import CreateBrokerAppPage from './CreateBrokerAppPage';
 
 jest.mock('react-router', () => ({
@@ -7,24 +8,44 @@ jest.mock('react-router', () => ({
   useNavigate: jest.fn(() => jest.fn()),
 }));
 
+let capturedOnYamlSave: ((yaml: string) => void | Promise<void>) | undefined;
+let capturedOnSwitchToForm: ((yaml: string) => { ok: boolean; error?: string }) | undefined;
+
 /**
  * ResourceFormEditor contains a YAML editor (Monaco/CodeMirror) that cannot run
  * in jsdom. Mocked here to render children and the submit button only, so
  * CreateBrokerAppPage form sections remain testable without the editor dependency.
+ *
+ * isFormValid is forwarded to the button's disabled attribute so integration
+ * tests can assert that validation state disables submission.
+ *
+ * onYamlSave and onSwitchToForm are captured so tests can invoke those paths directly.
  */
 jest.mock('../../shared-components/ResourceFormEditor', () => ({
   ResourceFormEditor: ({
     children,
     createButtonTestId,
+    isFormValid,
+    onYamlSave,
+    onSwitchToForm,
   }: {
     children: React.ReactNode;
     createButtonTestId?: string;
-  }) => (
-    <>
-      {children}
-      <button data-test={createButtonTestId}>Create</button>
-    </>
-  ),
+    isFormValid?: boolean;
+    onYamlSave?: (yaml: string) => void | Promise<void>;
+    onSwitchToForm?: (yaml: string) => { ok: boolean; error?: string };
+  }) => {
+    capturedOnYamlSave = onYamlSave;
+    capturedOnSwitchToForm = onSwitchToForm;
+    return (
+      <>
+        {children}
+        <button data-test={createButtonTestId} disabled={!isFormValid}>
+          Create
+        </button>
+      </>
+    );
+  },
 }));
 
 describe('CreateBrokerAppPage', () => {
@@ -49,5 +70,92 @@ describe('CreateBrokerAppPage', () => {
     expect(screen.getByTestId('brokerapp-cpu-limit')).toBeInTheDocument();
     expect(screen.getByTestId('brokerapp-memory-request')).toBeInTheDocument();
     expect(screen.getByTestId('brokerapp-memory-limit')).toBeInTheDocument();
+  });
+});
+
+describe('CreateBrokerAppPage — isFormValid integration', () => {
+  beforeEach(() => render(<CreateBrokerAppPage />));
+
+  it('enables the create button with default valid state', () => {
+    expect(screen.getByTestId('brokerapp-create-btn')).not.toBeDisabled();
+  });
+
+  it('disables the create button when the name is cleared', () => {
+    fireEvent.change(screen.getByTestId('brokerapp-name'), { target: { value: '' } });
+    expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
+  });
+
+  it('allows submission when no addresses exist', () => {
+    expect(screen.getByTestId('brokerapp-create-btn')).not.toBeDisabled();
+  });
+
+  it('disables the create button when duplicate addresses exist from YAML', () => {
+    if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
+    const switchToForm = capturedOnSwitchToForm;
+    act(() => {
+      switchToForm(
+        buildYaml({
+          addresses: [{ address: 'orders' }, { address: 'orders' }],
+          capabilities: [{ producerOf: [{ address: 'orders' }] }],
+        }),
+      );
+    });
+    expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
+  });
+
+  it('shows duplicate error on cards when switching from YAML with duplicates', () => {
+    if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
+    const switchToForm = capturedOnSwitchToForm;
+    act(() => {
+      switchToForm(
+        buildYaml({
+          addresses: [{ address: 'orders' }, { address: 'orders' }],
+          capabilities: [{ producerOf: [{ address: 'orders' }] }],
+        }),
+      );
+    });
+    expect(screen.getAllByText('Duplicate address')).toHaveLength(2);
+  });
+});
+
+const buildYaml = (spec: Record<string, unknown>) =>
+  jsYaml.dump({
+    apiVersion: 'broker.arkmq.org/v1beta2',
+    kind: 'BrokerApp',
+    metadata: { name: 'test', namespace: 'test-ns' },
+    spec,
+  });
+
+const getOnYamlSave = (): ((yaml: string) => void | Promise<void>) => {
+  if (!capturedOnYamlSave) throw new Error('onYamlSave was not captured — render first');
+  return capturedOnYamlSave;
+};
+
+describe('CreateBrokerAppPage — YAML submit path', () => {
+  beforeEach(() => render(<CreateBrokerAppPage />));
+
+  it('rejects YAML with overlapping private and shared addresses', () => {
+    expect(() =>
+      getOnYamlSave()(
+        buildYaml({
+          addresses: [{ address: 'overlap' }],
+          sharedAddresses: [{ address: 'overlap' }],
+        }),
+      ),
+    ).toThrow('Address "overlap" cannot appear in both spec.addresses and spec.sharedAddresses');
+  });
+
+  it('rejects YAML with duplicate addresses in spec.addresses', () => {
+    expect(() =>
+      getOnYamlSave()(buildYaml({ addresses: [{ address: 'orders' }, { address: 'orders' }] })),
+    ).toThrow('Duplicate address "orders"');
+  });
+
+  it('rejects YAML with duplicate addresses in spec.sharedAddresses', () => {
+    expect(() =>
+      getOnYamlSave()(
+        buildYaml({ sharedAddresses: [{ address: 'events' }, { address: 'events' }] }),
+      ),
+    ).toThrow('Duplicate address "events"');
   });
 });
