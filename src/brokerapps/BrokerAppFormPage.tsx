@@ -4,12 +4,9 @@ import * as jsYaml from 'js-yaml';
 import { PageSection, Title } from '@patternfly/react-core';
 import type { BrokerAppCR } from '../k8s/types';
 import {
-  validateDNS1123,
   validateLabelEntries,
-  validateAddressEntries,
-  validateNoDuplicateAddresses,
-  validateNoAddressOverlap,
   validateYamlDuplicateBrokerAppMatchLabels,
+  validateBrokerAppCR,
 } from '../validation/k8s';
 import { useBrokerAppFormState, useBrokerAppFormDispatch } from '../reducers/brokerapp/reducer';
 import { ResourceFormEditor } from '../shared-components/ResourceFormEditor';
@@ -51,15 +48,9 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
   const formState = useBrokerAppFormState();
   const dispatch = useBrokerAppFormDispatch();
 
-  const { cr, matchLabels, addresses, hasChanges } = formState;
-  const labelsValid = validateLabelEntries(matchLabels) === null;
-  const addressesValid =
-    validateAddressEntries(addresses.filter((a) => a.address.trim())).every(
-      (e) => e === undefined,
-    ) && validateNoDuplicateAddresses(addresses) === null;
-  const isFormValid = isEditMode
-    ? labelsValid && addressesValid
-    : validateDNS1123(cr.metadata?.name ?? '') === null && labelsValid && addressesValid;
+  const { cr, matchLabels, hasChanges } = formState;
+  const isFormValid =
+    validateBrokerAppCR(cr) === null && validateLabelEntries(matchLabels) === null;
 
   return (
     <>
@@ -86,21 +77,9 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
               throw new Error(duplicateLabelError);
             }
             const parsed = jsYaml.load(yaml) as BrokerAppCR;
-            const spec = (parsed as { spec?: typeof parsed.spec }).spec ?? {};
-            const privateDupError = validateNoDuplicateAddresses(spec.addresses ?? []);
-            if (privateDupError) {
-              throw new Error(privateDupError);
-            }
-            const sharedDupError = validateNoDuplicateAddresses(spec.sharedAddresses ?? []);
-            if (sharedDupError) {
-              throw new Error(sharedDupError);
-            }
-            const overlapError = validateNoAddressOverlap(
-              (spec.addresses ?? []).map((a) => a.address),
-              (spec.sharedAddresses ?? []).map((a) => a.address),
-            );
-            if (overlapError) {
-              throw new Error(overlapError);
+            const crError = validateBrokerAppCR(parsed, yaml);
+            if (crError) {
+              throw new Error(crError);
             }
             return onSubmit(parsed);
           }}
@@ -111,14 +90,22 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
             }
             try {
               const parsed = jsYaml.load(yaml) as BrokerAppCR;
+              const crError = validateBrokerAppCR(parsed, yaml);
+              if (crError) {
+                return { ok: false, error: crError };
+              }
               dispatch({
                 type: 'SET_MODEL',
                 payload: parsed,
+                yaml,
                 preserveLabels: validateLabelEntries(matchLabels) !== null,
               });
               return { ok: true };
-            } catch {
-              return { ok: false, error: t('Cannot switch to Form view: YAML is not valid') };
+            } catch (e) {
+              return {
+                ok: false,
+                error: e instanceof Error ? e.message : String(e),
+              };
             }
           }}
           onCancel={onCancel}

@@ -57,7 +57,11 @@ jest.mock('../shared-components/ResourceFormEditor', () => ({
       </button>
       <button
         data-test="yaml-save-btn"
-        onClick={() => void onYamlSave('apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp')}
+        onClick={() =>
+          void onYamlSave(
+            'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid-app\nspec: {}',
+          )
+        }
       >
         YAML Save
       </button>

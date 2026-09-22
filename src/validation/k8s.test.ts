@@ -1,3 +1,5 @@
+import * as jsYaml from 'js-yaml';
+import type { BrokerAppCR, BrokerService } from '../k8s/types';
 import {
   validateDNS1123,
   validateDuplicateAddressEntries,
@@ -10,6 +12,8 @@ import {
   validateAddressEntries,
   validateYamlDuplicateBrokerServiceLabels,
   validateYamlDuplicateBrokerAppMatchLabels,
+  validateBrokerAppCR,
+  validateBrokerServiceCR,
 } from './k8s';
 
 describe('validateDNS1123', () => {
@@ -425,5 +429,292 @@ describe('validateNoAddressOverlap', () => {
 
   it('ignores empty/whitespace-only entries when checking overlap', () => {
     expect(validateNoAddressOverlap(['', '   '], ['', '   '])).toBeNull();
+  });
+});
+
+const validBrokerAppCR: BrokerAppCR = {
+  apiVersion: 'broker.arkmq.org/v1beta2',
+  kind: 'BrokerApp',
+  metadata: { name: 'my-app', namespace: 'test-ns' },
+  spec: {},
+};
+
+const dumpYaml = (cr: object): string => jsYaml.dump(cr);
+
+describe('validateBrokerAppCR', () => {
+  it('returns null for a valid minimal CR', () => {
+    expect(validateBrokerAppCR(validBrokerAppCR, dumpYaml(validBrokerAppCR))).toBeNull();
+  });
+
+  it('returns null for a valid CR without yaml argument', () => {
+    expect(validateBrokerAppCR(validBrokerAppCR)).toBeNull();
+  });
+
+  it('returns errors without line numbers when yaml is omitted', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      metadata: { name: 'INVALID', namespace: 'test-ns' },
+    };
+    const error = validateBrokerAppCR(cr);
+    expect(error).toContain('metadata.name:');
+    expect(error).not.toContain('Line');
+  });
+
+  it('returns null for a valid CR with resources and addresses', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: {
+        resources: {
+          requests: { cpu: '250m', memory: '256Mi' },
+          limits: { cpu: '1', memory: '1Gi' },
+        },
+        addresses: [{ address: 'orders' }],
+        sharedAddresses: [{ address: 'events' }],
+      },
+    };
+    expect(validateBrokerAppCR(cr, dumpYaml(cr))).toBeNull();
+  });
+
+  it('rejects a name with uppercase letters (DNS-1123 violation)', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      metadata: { name: 'My-App', namespace: 'test-ns' },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('metadata.name:');
+  });
+
+  it('rejects an empty metadata.name', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      metadata: { name: '', namespace: 'test-ns' },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('metadata.name: Name is required');
+  });
+
+  it('rejects a memory suffix in a CPU request field', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: { resources: { requests: { cpu: '2Gi' } } },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.resources.requests.cpu:');
+  });
+
+  it('rejects a non-numeric CPU limit', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: { resources: { limits: { cpu: 'abc' } } },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.resources.limits.cpu:');
+  });
+
+  it('rejects a non-numeric memory request', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: { resources: { requests: { memory: 'bad' } } },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.resources.requests.memory:');
+  });
+
+  it('rejects a CPU suffix in a memory limit field', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: { resources: { limits: { memory: '500m' } } },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.resources.limits.memory:');
+  });
+
+  it('rejects an empty address name in spec.addresses', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: { addresses: [{ address: '' }] },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.addresses[0].address: Address is required');
+  });
+
+  it('rejects duplicate addresses in spec.addresses', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: { addresses: [{ address: 'orders' }, { address: 'orders' }] },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.addresses: Duplicate address "orders"');
+  });
+
+  it('rejects duplicate addresses in spec.sharedAddresses', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: { sharedAddresses: [{ address: 'events' }, { address: 'events' }] },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.sharedAddresses: Duplicate address "events"');
+  });
+
+  it('rejects overlapping addresses between spec.addresses and spec.sharedAddresses', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      spec: {
+        addresses: [{ address: 'overlap' }],
+        sharedAddresses: [{ address: 'overlap' }],
+      },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    expect(error).toContain(
+      'Address "overlap" cannot appear in both spec.addresses and spec.sharedAddresses',
+    );
+  });
+
+  it('collects multiple errors separated by newlines', () => {
+    const cr: BrokerAppCR = {
+      ...validBrokerAppCR,
+      metadata: { name: '', namespace: 'test-ns' },
+      spec: {
+        resources: { requests: { cpu: 'bad' } },
+        addresses: [{ address: 'dup' }, { address: 'dup' }],
+      },
+    };
+    const error = validateBrokerAppCR(cr, dumpYaml(cr));
+    if (error === null) {
+      throw new Error('Expected validation error but got null');
+    }
+    const lines = error.split('\n');
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    expect(lines[0]).toContain('metadata.name:');
+    expect(lines[1]).toContain('spec.resources.requests.cpu:');
+    expect(lines[2]).toContain('spec.addresses:');
+  });
+
+  it('includes line numbers from the YAML source', () => {
+    const yaml = [
+      'apiVersion: broker.arkmq.org/v1beta2',
+      'kind: BrokerApp',
+      'metadata:',
+      '  name: My-App',
+      '  namespace: test-ns',
+      'spec:',
+      '  resources:',
+      '    requests:',
+      '      cpu: 2Gi',
+    ].join('\n');
+    const cr = jsYaml.load(yaml) as BrokerAppCR;
+    const error = validateBrokerAppCR(cr, yaml);
+    expect(error).toContain('Line 4: metadata.name:');
+    expect(error).toContain('Line 9: spec.resources.requests.cpu:');
+  });
+});
+
+const validBrokerServiceCR: BrokerService = {
+  apiVersion: 'broker.arkmq.org/v1beta2',
+  kind: 'BrokerService',
+  metadata: { name: 'my-service', namespace: 'test-ns' },
+  spec: { resources: { limits: { memory: '2Gi' } } },
+};
+
+describe('validateBrokerServiceCR', () => {
+  it('returns null for a valid CR', () => {
+    expect(
+      validateBrokerServiceCR(validBrokerServiceCR, dumpYaml(validBrokerServiceCR)),
+    ).toBeNull();
+  });
+
+  it('returns null when memory is absent', () => {
+    const cr: BrokerService = {
+      ...validBrokerServiceCR,
+      spec: {},
+    };
+    expect(validateBrokerServiceCR(cr, dumpYaml(cr))).toBeNull();
+  });
+
+  it('returns null for memory with Mi unit', () => {
+    const cr: BrokerService = {
+      ...validBrokerServiceCR,
+      spec: { resources: { limits: { memory: '512Mi' } } },
+    };
+    expect(validateBrokerServiceCR(cr, dumpYaml(cr))).toBeNull();
+  });
+
+  it('rejects a name with uppercase letters (DNS-1123 violation)', () => {
+    const cr: BrokerService = {
+      ...validBrokerServiceCR,
+      metadata: { name: 'My-Service', namespace: 'test-ns' },
+    };
+    const error = validateBrokerServiceCR(cr, dumpYaml(cr));
+    expect(error).toContain('metadata.name:');
+  });
+
+  it('rejects memory with unsupported unit', () => {
+    const cr: BrokerService = {
+      ...validBrokerServiceCR,
+      spec: { resources: { limits: { memory: '2Ti' } } },
+    };
+    const error = validateBrokerServiceCR(cr, dumpYaml(cr));
+    expect(error).toContain("spec.resources.limits.memory: invalid format '2Ti'");
+  });
+
+  it('rejects memory with completely invalid format', () => {
+    const cr: BrokerService = {
+      ...validBrokerServiceCR,
+      spec: { resources: { limits: { memory: 'abc' } } },
+    };
+    const error = validateBrokerServiceCR(cr, dumpYaml(cr));
+    expect(error).toContain("spec.resources.limits.memory: invalid format 'abc'");
+  });
+
+  it('rejects memory with CPU suffix', () => {
+    const cr: BrokerService = {
+      ...validBrokerServiceCR,
+      spec: { resources: { limits: { memory: '500m' } } },
+    };
+    const error = validateBrokerServiceCR(cr, dumpYaml(cr));
+    expect(error).toContain("spec.resources.limits.memory: invalid format '500m'");
+  });
+
+  it('rejects zero memory value', () => {
+    const cr: BrokerService = {
+      ...validBrokerServiceCR,
+      spec: { resources: { limits: { memory: '0Gi' } } },
+    };
+    const error = validateBrokerServiceCR(cr, dumpYaml(cr));
+    expect(error).toContain('spec.resources.limits.memory: Memory value must be greater than 0');
+  });
+
+  it('collects multiple errors separated by newlines', () => {
+    const cr: BrokerService = {
+      ...validBrokerServiceCR,
+      metadata: { name: '', namespace: 'test-ns' },
+      spec: { resources: { limits: { memory: 'bad' } } },
+    };
+    const error = validateBrokerServiceCR(cr, dumpYaml(cr));
+    if (error === null) {
+      throw new Error('Expected validation error but got null');
+    }
+    const lines = error.split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('metadata.name:');
+    expect(lines[1]).toContain('spec.resources.limits.memory:');
+  });
+
+  it('includes line numbers from the YAML source', () => {
+    const yaml = [
+      'apiVersion: broker.arkmq.org/v1beta2',
+      'kind: BrokerService',
+      'metadata:',
+      '  name: My-Service',
+      '  namespace: test-ns',
+      'spec:',
+      '  resources:',
+      '    limits:',
+      '      memory: abc',
+    ].join('\n');
+    const cr = jsYaml.load(yaml) as BrokerService;
+    const error = validateBrokerServiceCR(cr, yaml);
+    expect(error).toContain('Line 4: metadata.name:');
+    expect(error).toContain('Line 9: spec.resources.limits.memory:');
   });
 });

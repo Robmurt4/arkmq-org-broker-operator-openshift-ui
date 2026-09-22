@@ -350,6 +350,73 @@ describe('brokerServiceReducer', () => {
   });
 });
 
+describe('SET_MODEL validation', () => {
+  it('returns current state when yaml is provided and CR has an invalid name', () => {
+    const yaml =
+      'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerService\nmetadata:\n  name: INVALID\n  namespace: test-ns\nspec:\n  resources:\n    limits:\n      memory: 2Gi\n';
+    const initial = createState();
+    const result = brokerServiceReducer(initial, {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerService',
+        metadata: { name: 'INVALID', namespace: 'test-ns' },
+        spec: { resources: { limits: { memory: '2Gi' } } },
+      },
+      yaml,
+    });
+    expect(result).toBe(initial);
+  });
+
+  it('returns current state when yaml is provided and CR has invalid memory format', () => {
+    const yaml =
+      'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerService\nmetadata:\n  name: valid\n  namespace: test-ns\nspec:\n  resources:\n    limits:\n      memory: 2Ti\n';
+    const initial = createState();
+    const result = brokerServiceReducer(initial, {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerService',
+        metadata: { name: 'valid', namespace: 'test-ns' },
+        spec: { resources: { limits: { memory: '2Ti' } } },
+      },
+      yaml,
+    });
+    expect(result).toBe(initial);
+  });
+
+  it('does not throw when yaml is provided and CR is valid', () => {
+    const yaml =
+      'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerService\nmetadata:\n  name: valid\n  namespace: test-ns\nspec:\n  resources:\n    limits:\n      memory: 2Gi\n';
+    expect(() =>
+      brokerServiceReducer(createState(), {
+        type: 'SET_MODEL',
+        payload: {
+          apiVersion: 'broker.arkmq.org/v1beta2',
+          kind: 'BrokerService',
+          metadata: { name: 'valid', namespace: 'test-ns' },
+          spec: { resources: { limits: { memory: '2Gi' } } },
+        },
+        yaml,
+      }),
+    ).not.toThrow();
+  });
+
+  it('does not validate when yaml is not provided (cluster reload)', () => {
+    expect(() =>
+      brokerServiceReducer(createState(), {
+        type: 'SET_MODEL',
+        payload: {
+          apiVersion: 'broker.arkmq.org/v1beta2',
+          kind: 'BrokerService',
+          metadata: { name: 'INVALID', namespace: 'test-ns' },
+          spec: { resources: { limits: { memory: '2Ti' } } },
+        },
+      }),
+    ).not.toThrow();
+  });
+});
+
 describe('broker service hooks', () => {
   it('useBrokerServiceFormState throws when used outside its Provider', () => {
     jest.spyOn(console, 'error').mockImplementation(() => undefined);

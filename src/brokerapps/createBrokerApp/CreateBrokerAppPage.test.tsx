@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import * as jsYaml from 'js-yaml';
 import CreateBrokerAppPage from './CreateBrokerAppPage';
 
@@ -89,32 +89,41 @@ describe('CreateBrokerAppPage — isFormValid integration', () => {
     expect(screen.getByTestId('brokerapp-create-btn')).not.toBeDisabled();
   });
 
-  it('disables the create button when duplicate addresses exist from YAML', () => {
+  it('rejects YAML with duplicate addresses on switch to form', () => {
     if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
-    const switchToForm = capturedOnSwitchToForm;
-    act(() => {
-      switchToForm(
-        buildYaml({
-          addresses: [{ address: 'orders' }, { address: 'orders' }],
-          capabilities: [{ producerOf: [{ address: 'orders' }] }],
-        }),
-      );
-    });
-    expect(screen.getByTestId('brokerapp-create-btn')).toBeDisabled();
+    const result = capturedOnSwitchToForm(
+      buildYaml({
+        addresses: [{ address: 'orders' }, { address: 'orders' }],
+        capabilities: [{ producerOf: [{ address: 'orders' }] }],
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Duplicate address "orders"');
   });
 
-  it('shows duplicate error on cards when switching from YAML with duplicates', () => {
+  it('rejects YAML with overlapping private and shared addresses on switch to form', () => {
     if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
-    const switchToForm = capturedOnSwitchToForm;
-    act(() => {
-      switchToForm(
-        buildYaml({
-          addresses: [{ address: 'orders' }, { address: 'orders' }],
-          capabilities: [{ producerOf: [{ address: 'orders' }] }],
-        }),
-      );
-    });
-    expect(screen.getAllByText('Duplicate address')).toHaveLength(2);
+    const result = capturedOnSwitchToForm(
+      buildYaml({
+        addresses: [{ address: 'overlap' }],
+        sharedAddresses: [{ address: 'overlap' }],
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain(
+      'Address "overlap" cannot appear in both spec.addresses and spec.sharedAddresses',
+    );
+  });
+
+  it('accepts valid YAML on switch to form', () => {
+    if (!capturedOnSwitchToForm) throw new Error('onSwitchToForm was not captured');
+    const result = capturedOnSwitchToForm(
+      buildYaml({
+        addresses: [{ address: 'orders' }],
+        sharedAddresses: [{ address: 'events' }],
+      }),
+    );
+    expect(result.ok).toBe(true);
   });
 });
 

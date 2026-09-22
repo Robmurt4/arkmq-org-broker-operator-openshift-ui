@@ -1,6 +1,7 @@
 import type { Dispatch } from 'react';
 import { createContext, useContext } from 'react';
 import type { BrokerAppCR, BrokerAppSpec, MatchAddress, PrivateAddress } from '../../k8s/types';
+import { validateBrokerAppCR } from '../../validation/k8s';
 
 export interface MatchLabel {
   id: string;
@@ -39,7 +40,13 @@ export type BrokerAppFormAction =
   | { type: 'ADD_MATCH_LABEL' }
   | { type: 'REMOVE_MATCH_LABEL'; payload: string }
   | { type: 'UPDATE_MATCH_LABEL'; payload: { id: string; key: string; value: string } }
-  | { type: 'SET_MODEL'; payload: BrokerAppCR; preserveLabels?: boolean; resetChanges?: boolean }
+  | {
+      type: 'SET_MODEL';
+      payload: BrokerAppCR;
+      yaml?: string;
+      preserveLabels?: boolean;
+      resetChanges?: boolean;
+    }
   | { type: 'SET_CPU_REQUEST'; payload: string }
   | { type: 'SET_CPU_LIMIT'; payload: string }
   | { type: 'SET_MEMORY_REQUEST'; payload: string }
@@ -279,7 +286,11 @@ export const brokerAppReducer = (
       );
       break;
 
-    case 'SET_MODEL':
+    case 'SET_MODEL': {
+      if (action.yaml) {
+        const error = validateBrokerAppCR(action.payload, action.yaml);
+        if (error) return state;
+      }
       cr = { ...action.payload, spec: { ...action.payload.spec } };
       matchLabels = action.preserveLabels
         ? mergeMatchLabelsWithYaml(matchLabels, cr.spec.selector?.matchLabels)
@@ -287,7 +298,14 @@ export const brokerAppReducer = (
       addresses = hydrateAddresses(cr);
       syncSelectorFromLabels(cr, matchLabels);
       syncAddressesToCR(cr, addresses);
-      return { ...state, cr, matchLabels, addresses, hasChanges: !action.resetChanges };
+      return {
+        ...state,
+        cr,
+        matchLabels,
+        addresses,
+        hasChanges: !action.resetChanges,
+      };
+    }
 
     case 'SET_CPU_REQUEST':
       if (action.payload) {

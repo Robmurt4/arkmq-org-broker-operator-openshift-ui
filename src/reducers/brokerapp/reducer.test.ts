@@ -398,6 +398,80 @@ describe('brokerAppReducer resource fields', () => {
   });
 });
 
+describe('SET_MODEL validation', () => {
+  beforeEach(() => {
+    let nowCounter = 0;
+    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('returns current state when yaml is provided and CR has an invalid name', () => {
+    const yaml =
+      'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: INVALID\n  namespace: test-ns\nspec: {}\n';
+    const initial = createInitialBrokerAppState('test-ns');
+    const result = brokerAppReducer(initial, {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerApp',
+        metadata: { name: 'INVALID', namespace: 'test-ns' },
+        spec: {},
+      },
+      yaml,
+    });
+    expect(result).toBe(initial);
+  });
+
+  it('returns current state when yaml is provided and CR has duplicate addresses', () => {
+    const cr = makeCR('valid', {
+      addresses: [{ address: 'orders' }, { address: 'orders' }],
+    });
+    const yaml = `apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid\n  namespace: test-ns\nspec:\n  addresses:\n    - address: orders\n    - address: orders\n`;
+    const initial = createInitialBrokerAppState('test-ns');
+    const result = brokerAppReducer(initial, {
+      type: 'SET_MODEL',
+      payload: cr,
+      yaml,
+    });
+    expect(result).toBe(initial);
+  });
+
+  it('accepts valid CR when yaml is provided', () => {
+    const yaml =
+      'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid\n  namespace: test-ns\nspec: {}\n';
+    const initial = createInitialBrokerAppState('test-ns');
+    const result = brokerAppReducer(initial, {
+      type: 'SET_MODEL',
+      payload: {
+        apiVersion: 'broker.arkmq.org/v1beta2',
+        kind: 'BrokerApp',
+        metadata: { name: 'valid', namespace: 'test-ns' },
+        spec: {},
+      },
+      yaml,
+    });
+    expect(result).not.toBe(initial);
+    expect(result.cr.metadata?.name).toBe('valid');
+  });
+
+  it('does not validate when yaml is not provided (cluster reload)', () => {
+    expect(() =>
+      brokerAppReducer(createInitialBrokerAppState('test-ns'), {
+        type: 'SET_MODEL',
+        payload: {
+          apiVersion: 'broker.arkmq.org/v1beta2',
+          kind: 'BrokerApp',
+          metadata: { name: 'INVALID', namespace: 'test-ns' },
+          spec: {},
+        },
+      }),
+    ).not.toThrow();
+  });
+});
+
 describe('broker app hooks', () => {
   it('useBrokerAppFormState throws when used outside its Provider', () => {
     jest.spyOn(console, 'error').mockImplementation(() => undefined);

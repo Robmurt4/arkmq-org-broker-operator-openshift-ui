@@ -1,4 +1,5 @@
 import * as React from 'react';
+import * as jsYaml from 'js-yaml';
 import { render, screen } from '@testing-library/react';
 import { useParams } from 'react-router';
 import CreateBrokerServicePage from './CreateBrokerServicePage';
@@ -10,22 +11,29 @@ jest.mock('react-router', () => ({
   useNavigate: jest.fn(() => jest.fn()),
 }));
 
+let capturedOnYamlSave: ((yaml: string) => void | Promise<void>) | undefined;
+
 jest.mock('../../shared-components/ResourceFormEditor', () => ({
   ResourceFormEditor: ({
     children,
     createButtonTestId,
     cancelButtonTestId,
+    onYamlSave,
   }: {
     children: React.ReactNode;
     createButtonTestId?: string;
     cancelButtonTestId?: string;
-  }) => (
-    <>
-      {children}
-      <button data-test={createButtonTestId}>Create</button>
-      <button data-test={cancelButtonTestId}>Cancel</button>
-    </>
-  ),
+    onYamlSave?: (yaml: string) => void | Promise<void>;
+  }) => {
+    capturedOnYamlSave = onYamlSave;
+    return (
+      <>
+        {children}
+        <button data-test={createButtonTestId}>Create</button>
+        <button data-test={cancelButtonTestId}>Cancel</button>
+      </>
+    );
+  },
 }));
 
 const mockUseParams = useParams as jest.Mock;
@@ -65,5 +73,43 @@ describe('CreateBrokerServicePage', () => {
 
     expect(screen.getByTestId('create-broker-service-button')).toBeInTheDocument();
     expect(screen.getByTestId('cancel-broker-service-button')).toBeInTheDocument();
+  });
+});
+
+const buildBrokerServiceYaml = (overrides: Record<string, unknown> = {}) =>
+  jsYaml.dump({
+    apiVersion: 'broker.arkmq.org/v1beta2',
+    kind: 'BrokerService',
+    metadata: { name: 'my-service', namespace: TEST_NAMESPACE },
+    spec: { resources: { limits: { memory: '2Gi' } } },
+    ...overrides,
+  });
+
+const getOnYamlSave = (): ((yaml: string) => void | Promise<void>) => {
+  if (!capturedOnYamlSave) throw new Error('onYamlSave was not captured — render first');
+  return capturedOnYamlSave;
+};
+
+describe('CreateBrokerServicePage — YAML submit validation', () => {
+  beforeEach(() => render(<CreateBrokerServicePage />));
+
+  it('rejects YAML with invalid memory format', () => {
+    expect(() =>
+      getOnYamlSave()(
+        buildBrokerServiceYaml({
+          spec: { resources: { limits: { memory: '2Ti' } } },
+        }),
+      ),
+    ).toThrow("invalid format '2Ti'");
+  });
+
+  it('rejects YAML with invalid name', () => {
+    expect(() =>
+      getOnYamlSave()(
+        buildBrokerServiceYaml({
+          metadata: { name: 'INVALID', namespace: TEST_NAMESPACE },
+        }),
+      ),
+    ).toThrow('metadata.name');
   });
 });

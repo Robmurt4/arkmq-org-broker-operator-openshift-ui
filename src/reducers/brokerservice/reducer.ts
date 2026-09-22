@@ -1,6 +1,7 @@
 import type { Dispatch } from 'react';
 import { createContext, useContext } from 'react';
 import type { BrokerService } from '../../k8s/types';
+import { FORM_MEMORY_REGEX, validateBrokerServiceCR } from '../../validation/k8s';
 
 export interface LabelEntry {
   key: string;
@@ -28,7 +29,13 @@ export type BrokerServiceFormAction =
    * An empty or whitespace-only payload removes spec.image so the operator uses its default.
    */
   | { type: 'SET_IMAGE'; payload: string }
-  | { type: 'SET_MODEL'; payload: BrokerService; preserveLabels?: boolean; resetChanges?: boolean };
+  | {
+      type: 'SET_MODEL';
+      payload: BrokerService;
+      yaml?: string;
+      preserveLabels?: boolean;
+      resetChanges?: boolean;
+    };
 
 // First occurrence wins so duplicate form rows do not overwrite YAML preview values.
 const labelsToRecord = (labels: LabelEntry[]): Record<string, string> | undefined => {
@@ -65,7 +72,7 @@ const mergeFormLabelsWithYaml = (
 };
 
 const parseMemory = (memoryStr: string | undefined): { value: string; unit: 'Mi' | 'Gi' } => {
-  const match = /^(\d+(?:\.\d+)?)(Mi|Gi)$/.exec(memoryStr ?? '');
+  const match = FORM_MEMORY_REGEX.exec(memoryStr ?? '');
   return {
     value: match ? match[1] : '2',
     unit: match && (match[2] === 'Mi' || match[2] === 'Gi') ? match[2] : 'Gi',
@@ -147,8 +154,11 @@ export const brokerServiceReducer = (
       }
       break;
     }
-
     case 'SET_MODEL':
+      if (action.yaml) {
+        const error = validateBrokerServiceCR(action.payload, action.yaml);
+        if (error) return state;
+      }
       cr = { ...cloneBrokerService(action.payload), spec: { ...action.payload.spec } };
       labels = action.preserveLabels
         ? mergeFormLabelsWithYaml(state.labels, cr.metadata?.labels)

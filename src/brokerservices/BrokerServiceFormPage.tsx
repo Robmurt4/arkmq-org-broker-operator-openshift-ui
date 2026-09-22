@@ -4,9 +4,8 @@ import * as jsYaml from 'js-yaml';
 import { Alert, Content, PageSection, Stack, StackItem, Title } from '@patternfly/react-core';
 import type { BrokerService } from '../k8s/types';
 import {
-  validateDNS1123,
+  validateBrokerServiceCR,
   validateLabelEntries,
-  validateMemoryValue,
   validateYamlDuplicateBrokerServiceLabels,
 } from '../validation/k8s';
 import {
@@ -55,12 +54,8 @@ export const BrokerServiceFormPage: React.FC<BrokerServiceFormPageProps> = ({
   const formState = useBrokerServiceFormState();
   const dispatch = useBrokerServiceFormDispatch();
 
-  const { cr, labels, memoryValue, hasChanges } = formState;
-  const labelsValid = validateLabelEntries(labels) === null;
-  const memoryValid = validateMemoryValue(memoryValue) === null;
-  const isFormValid = isEditMode
-    ? labelsValid && memoryValid
-    : validateDNS1123(cr.metadata?.name ?? '') === null && labelsValid && memoryValid;
+  const { cr, labels, hasChanges } = formState;
+  const isFormValid = validateBrokerServiceCR(cr) === null && validateLabelEntries(labels) === null;
 
   return (
     <>
@@ -107,7 +102,12 @@ export const BrokerServiceFormPage: React.FC<BrokerServiceFormPageProps> = ({
             if (duplicateLabelError) {
               throw new Error(duplicateLabelError);
             }
-            return onSubmit(jsYaml.load(yaml) as BrokerService);
+            const parsed = jsYaml.load(yaml) as BrokerService;
+            const crError = validateBrokerServiceCR(parsed, yaml);
+            if (crError) {
+              throw new Error(crError);
+            }
+            return onSubmit(parsed);
           }}
           onSwitchToForm={(yaml) => {
             const duplicateLabelError = validateYamlDuplicateBrokerServiceLabels(yaml);
@@ -116,14 +116,22 @@ export const BrokerServiceFormPage: React.FC<BrokerServiceFormPageProps> = ({
             }
             try {
               const parsed = jsYaml.load(yaml) as BrokerService;
+              const crError = validateBrokerServiceCR(parsed, yaml);
+              if (crError) {
+                return { ok: false, error: crError };
+              }
               dispatch({
                 type: 'SET_MODEL',
                 payload: parsed,
+                yaml,
                 preserveLabels: validateLabelEntries(labels) !== null,
               });
               return { ok: true };
-            } catch {
-              return { ok: false, error: t('Cannot switch to Form view: YAML is not valid') };
+            } catch (e) {
+              return {
+                ok: false,
+                error: e instanceof Error ? e.message : String(e),
+              };
             }
           }}
           onCancel={onCancel}

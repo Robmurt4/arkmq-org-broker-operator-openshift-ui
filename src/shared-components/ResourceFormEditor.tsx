@@ -274,7 +274,9 @@ export const ResourceFormEditor: React.FC<ResourceFormEditorProps> = ({
         />
         <ModalBody>
           <Alert variant="danger" isInline title={t('Conversion error')}>
-            {yamlConvertError}
+            {yamlConvertError?.split('\n').map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
           </Alert>
         </ModalBody>
         <ModalFooter>

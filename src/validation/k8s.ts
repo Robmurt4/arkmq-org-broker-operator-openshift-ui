@@ -1,3 +1,9 @@
+import { type Document, parseDocument } from 'yaml';
+import type { BrokerAppCR, BrokerAppSpec, BrokerService } from '../k8s/types';
+
+/** Matches a memory string the BrokerService form can represent: `<number>Mi` or `<number>Gi`. */
+export const FORM_MEMORY_REGEX = /^(\d+(?:\.\d+)?)(Mi|Gi)$/;
+
 export const validateDNS1123 = (value: string): string | null => {
   if (!value) return 'Name is required';
   if (value.length > 253) return 'Name must be 253 characters or fewer';
@@ -220,4 +226,147 @@ export const validateMemoryValue = (value: string): string | null => {
   }
 
   return null;
+};
+
+/**
+ * Finds the 1-based line number in a pre-parsed YAML document for a dotted field path.
+ * For array-indexed paths like "spec.addresses[0].address", locates the indexed element.
+ */
+const findYamlLineForPath = (doc: Document, yaml: string, fieldPath: string): number | null => {
+  const pathSegments: (string | number)[] = [];
+  for (const part of fieldPath.split('.')) {
+    const m = /^(.+)\[(\d+)\]$/.exec(part);
+    if (m) {
+      pathSegments.push(m[1], parseInt(m[2], 10));
+    } else {
+      pathSegments.push(part);
+    }
+  }
+
+  const node = doc.getIn(pathSegments, true);
+  if (!node || typeof node !== 'object' || !('range' in node)) return null;
+
+  const range = (node as { range?: [number, number, number] }).range;
+  if (!range) return null;
+
+  return yaml.slice(0, range[0]).split('\n').length;
+};
+
+/**
+ * Creates a field-error formatter that parses the YAML document once and reuses it
+ * across all error messages for a single validation pass.
+ */
+const createFieldErrorFormatter = (yaml?: string) => {
+  const doc = yaml ? parseDocument(yaml) : undefined;
+  return (path: string, message: string): string => {
+    if (doc && yaml) {
+      const line = findYamlLineForPath(doc, yaml, path);
+      if (line !== null) return `Line ${String(line)}: ${path}: ${message}`;
+    }
+    return `${path}: ${message}`;
+  };
+};
+
+/**
+ * Validates all managed BrokerApp fields before accepting a YAML-parsed CR into form state.
+ * Prevents invalid values (malformed names, bad CPU/memory quantities, duplicate or overlapping
+ * addresses) from bypassing form-level validation when switching from YAML to Form view.
+ *
+ * @param cr - Parsed BrokerApp CR from YAML or live form state
+ * @param yaml - Raw YAML text for line numbers in error messages; omit for form-only validation
+ * @returns Newline-separated error messages with field paths (and line numbers when yaml is provided), or null when valid
+ */
+export const validateBrokerAppCR = (cr: BrokerAppCR, yaml?: string): string | null => {
+  const errors: string[] = [];
+  const fmt = createFieldErrorFormatter(yaml);
+  // YAML-parsed CRs are unsafely cast — spec may be absent at runtime
+  const spec = cr.spec as BrokerAppSpec | undefined;
+
+  const nameError = validateDNS1123(cr.metadata?.name ?? '');
+  if (nameError) errors.push(fmt('metadata.name', nameError));
+
+  const cpuReq = spec?.resources?.requests?.cpu;
+  if (cpuReq) {
+    const err = validateCpuQuantity(cpuReq);
+    if (err) errors.push(fmt('spec.resources.requests.cpu', err));
+  }
+
+  const cpuLim = spec?.resources?.limits?.cpu;
+  if (cpuLim) {
+    const err = validateCpuQuantity(cpuLim);
+    if (err) errors.push(fmt('spec.resources.limits.cpu', err));
+  }
+
+  const memReq = spec?.resources?.requests?.memory;
+  if (memReq) {
+    const err = validateMemoryQuantity(memReq);
+    if (err) errors.push(fmt('spec.resources.requests.memory', err));
+  }
+
+  const memLim = spec?.resources?.limits?.memory;
+  if (memLim) {
+    const err = validateMemoryQuantity(memLim);
+    if (err) errors.push(fmt('spec.resources.limits.memory', err));
+  }
+
+  const privateAddrs = spec?.addresses ?? [];
+  privateAddrs.forEach((a, i) => {
+    if (!a.address.trim()) {
+      errors.push(fmt(`spec.addresses[${String(i)}].address`, 'Address is required'));
+    }
+  });
+  const privateDup = validateNoDuplicateAddresses(privateAddrs);
+  if (privateDup) errors.push(fmt('spec.addresses', privateDup));
+
+  const sharedAddrs = spec?.sharedAddresses ?? [];
+  sharedAddrs.forEach((a, i) => {
+    if (!a.address.trim()) {
+      errors.push(fmt(`spec.sharedAddresses[${String(i)}].address`, 'Address is required'));
+    }
+  });
+  const sharedDup = validateNoDuplicateAddresses(sharedAddrs);
+  if (sharedDup) errors.push(fmt('spec.sharedAddresses', sharedDup));
+
+  const overlapError = validateNoAddressOverlap(
+    privateAddrs.map((a) => a.address),
+    sharedAddrs.map((a) => a.address),
+  );
+  if (overlapError) errors.push(fmt('spec.addresses', overlapError));
+
+  return errors.length ? errors.join('\n') : null;
+};
+
+/**
+ * Validates all managed BrokerService fields before accepting a YAML-parsed CR into form state.
+ * The form decomposes memory into a numeric value and a unit (Mi or Gi); values with other
+ * formats would be silently converted to defaults, so they are rejected here.
+ *
+ * @param cr - Parsed BrokerService CR from YAML or live form state
+ * @param yaml - Raw YAML text for line numbers in error messages; omit for form-only validation
+ * @returns Newline-separated error messages with field paths (and line numbers when yaml is provided), or null when valid
+ */
+export const validateBrokerServiceCR = (cr: BrokerService, yaml?: string): string | null => {
+  const errors: string[] = [];
+  const fmt = createFieldErrorFormatter(yaml);
+
+  const nameError = validateDNS1123(cr.metadata?.name ?? '');
+  if (nameError) errors.push(fmt('metadata.name', nameError));
+
+  const memoryStr = cr.spec?.resources?.limits?.memory;
+  if (memoryStr !== undefined) {
+    const memMatch = FORM_MEMORY_REGEX.exec(memoryStr);
+    if (!memMatch) {
+      errors.push(
+        fmt(
+          'spec.resources.limits.memory',
+          `invalid format '${memoryStr}', expected <number>Mi or <number>Gi (e.g., 256Mi, 2Gi)`,
+        ),
+      );
+    } else {
+      const numError = validateMemoryValue(memMatch[1]);
+      if (numError) errors.push(fmt('spec.resources.limits.memory', numError));
+    }
+  }
+
+  return errors.length ? errors.join('\n') : null;
 };

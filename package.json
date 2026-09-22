@@ -95,5 +95,8 @@
     "dependencies": {
       "@console/pluginAPI": ">=4.22.0-0"
     }
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
   }
 }
