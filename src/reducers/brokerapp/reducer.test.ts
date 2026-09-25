@@ -5,6 +5,7 @@ import {
   useBrokerAppFormState,
   useBrokerAppFormDispatch,
 } from './reducer';
+import type { AddressOwnership } from './reducer';
 
 describe('brokerAppReducer', () => {
   const ns = 'test-ns';
@@ -920,4 +921,135 @@ describe('SET_MODEL hydration', () => {
       ]),
     );
   });
+
+  it('hydrates appName and appNamespace from external capability entries', () => {
+    const state = applyActions({
+      type: 'SET_MODEL',
+      payload: makeCR('imported', {
+        capabilities: [
+          {
+            producerOf: [
+              { address: 'remote.queue', appName: 'other-app', appNamespace: 'other-ns' },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(state.addresses).toHaveLength(1);
+    expect(state.addresses[0]).toMatchObject({
+      address: 'remote.queue',
+      ownership: 'external',
+      direction: 'produces',
+      appName: 'other-app',
+      appNamespace: 'other-ns',
+    });
+  });
+
+  it('round-trips appName/appNamespace through SET_MODEL hydration and CR sync', () => {
+    const state = applyActions({
+      type: 'SET_MODEL',
+      payload: makeCR('imported', {
+        capabilities: [
+          {
+            producerOf: [
+              { address: 'remote.queue', appName: 'other-app', appNamespace: 'other-ns' },
+            ],
+            consumerOf: [
+              { address: 'remote.queue', appName: 'other-app', appNamespace: 'other-ns' },
+            ],
+          },
+        ],
+      }),
+    });
+    expect(state.addresses[0]).toMatchObject({
+      direction: 'both',
+      appName: 'other-app',
+      appNamespace: 'other-ns',
+    });
+    expect(state.cr.spec.capabilities?.[0]?.producerOf).toEqual([
+      { address: 'remote.queue', appName: 'other-app', appNamespace: 'other-ns' },
+    ]);
+    expect(state.cr.spec.capabilities?.[0]?.consumerOf).toEqual([
+      { address: 'remote.queue', appName: 'other-app', appNamespace: 'other-ns' },
+    ]);
+  });
+});
+
+describe('appName/appNamespace on external addresses', () => {
+  beforeEach(() => {
+    let nowCounter = 0;
+    jest.spyOn(global.Date, 'now').mockImplementation(() => ++nowCounter);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const EXTERNAL_WITH_REF = {
+    type: 'UPDATE_ADDRESS' as const,
+    payload: {
+      index: 0,
+      address: 'remote.queue',
+      ownership: 'external' as const,
+      appName: 'other-app',
+      appNamespace: 'other-ns',
+    },
+  };
+
+  it('syncAddressesToCR writes appName/appNamespace to capability entries', () => {
+    const state = applyActions({ type: 'ADD_ADDRESS' }, EXTERNAL_WITH_REF);
+    expect(state.cr.spec.addresses).toBeUndefined();
+    expect(state.cr.spec.sharedAddresses).toBeUndefined();
+    expect(state.cr.spec.capabilities?.[0]?.producerOf).toEqual([
+      { address: 'remote.queue', appName: 'other-app', appNamespace: 'other-ns' },
+    ]);
+  });
+
+  it('capability entries omit appName/appNamespace when not set', () => {
+    const state = applyActions(
+      { type: 'ADD_ADDRESS' },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: { index: 0, address: 'remote.queue', ownership: 'external' },
+      },
+    );
+    const entry = state.cr.spec.capabilities?.[0]?.producerOf?.[0];
+    expect(entry).toEqual({ address: 'remote.queue' });
+    expect(entry).not.toHaveProperty('appName');
+    expect(entry).not.toHaveProperty('appNamespace');
+  });
+
+  it.each([
+    { field: 'appName', value: 'other-app', absent: 'appNamespace' },
+    { field: 'appNamespace', value: 'other-ns', absent: 'appName' },
+  ])('writes only $field when $absent is absent', ({ field, value, absent }) => {
+    const state = applyActions(
+      { type: 'ADD_ADDRESS' },
+      {
+        type: 'UPDATE_ADDRESS',
+        payload: { index: 0, address: 'remote.queue', ownership: 'external', [field]: value },
+      },
+    );
+    const entry = state.cr.spec.capabilities?.[0]?.producerOf?.[0];
+    expect(entry).toEqual({ address: 'remote.queue', [field]: value });
+    expect(entry).not.toHaveProperty(absent);
+  });
+
+  it.each<{ target: AddressOwnership; crField: string }>([
+    { target: 'private', crField: 'addresses' },
+    { target: 'shared', crField: 'sharedAddresses' },
+  ])(
+    'switching ownership from external to $target clears appName/appNamespace',
+    ({ target, crField }) => {
+      const state = applyActions({ type: 'ADD_ADDRESS' }, EXTERNAL_WITH_REF, {
+        type: 'UPDATE_ADDRESS',
+        payload: { index: 0, ownership: target },
+      });
+      expect(state.addresses[0].appName).toBeUndefined();
+      expect(state.addresses[0].appNamespace).toBeUndefined();
+      expect(state.cr.spec[crField as keyof typeof state.cr.spec]).toEqual([
+        { address: 'remote.queue' },
+      ]);
+    },
+  );
 });

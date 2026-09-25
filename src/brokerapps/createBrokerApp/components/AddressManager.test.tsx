@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useReducer } from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
+import { useK8sWatchResource } from '@openshift-console/dynamic-plugin-sdk';
 import {
   brokerAppReducer,
   createInitialBrokerAppState,
@@ -513,5 +514,207 @@ describe('AddressManager — address required validation', () => {
     });
     saveModal();
     expect(screen.getByText('Address is required')).toBeInTheDocument();
+  });
+});
+
+const mockWatchResource = useK8sWatchResource as jest.Mock;
+
+const MOCK_BROKER_APPS = [
+  {
+    metadata: { name: 'order-generator', namespace: 'service-project' },
+    spec: { sharedAddresses: [{ address: 'ORDERS.NEW' }, { address: 'ORDERS.PROCESSED' }] },
+  },
+  {
+    metadata: { name: 'event-publisher', namespace: 'service-project' },
+    spec: { sharedAddresses: [{ address: 'EVENTS.TOPIC' }] },
+  },
+  {
+    metadata: { name: 'inventory-app', namespace: 'ns-alpha' },
+    spec: { sharedAddresses: [{ address: 'INVENTORY.UPDATES' }] },
+  },
+];
+
+/**
+ * Configures the mock so the cluster-wide BrokerApp watch returns the full app list.
+ * Namespaces are derived from the BrokerApp metadata, not a separate Namespace watch.
+ */
+const setupExternalMocks = () => {
+  mockWatchResource.mockImplementation(
+    (resource: { groupVersionKind?: { kind?: string } } | null) => {
+      if (!resource) return [[], false, undefined];
+      if (resource.groupVersionKind?.kind === 'BrokerApp') {
+        return [MOCK_BROKER_APPS, true, undefined];
+      }
+      return [[], false, undefined];
+    },
+  );
+};
+
+const selectExternal = () => {
+  fireEvent.click(screen.getByText('External'));
+};
+
+const selectTypeaheadOption = (ariaLabel: string, optionText: string) => {
+  const input = screen.getByLabelText(ariaLabel);
+  fireEvent.change(input, { target: { value: '' } });
+  fireEvent.click(input);
+  fireEvent.click(screen.getByText(optionText));
+};
+
+const selectExternalApp = (ns = 'service-project', app = 'order-generator') => {
+  selectExternal();
+  selectTypeaheadOption('App namespace', ns);
+  selectTypeaheadOption('App name', app);
+};
+
+describe('AddressManager — external address typeahead', () => {
+  beforeEach(() => {
+    setupExternalMocks();
+    render(<Wrapper />);
+    addEntry();
+  });
+
+  afterEach(() => {
+    mockWatchResource.mockReset();
+  });
+
+  it('shows namespace and app name dropdowns when external is selected', () => {
+    selectExternal();
+    expect(screen.getByLabelText('App namespace')).toBeInTheDocument();
+    expect(screen.getByLabelText('App name')).toBeInTheDocument();
+  });
+
+  it('hides namespace and app name dropdowns for private ownership', () => {
+    expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
+  });
+
+  it('shows placeholder text when no namespace is selected', () => {
+    selectExternal();
+    expect(screen.getByPlaceholderText('Select a namespace first')).toBeInTheDocument();
+  });
+
+  it('shows app name placeholder after selecting a namespace', () => {
+    selectExternal();
+    selectTypeaheadOption('App namespace', 'service-project');
+    expect(screen.getByPlaceholderText('Select a BrokerApp')).toBeInTheDocument();
+  });
+
+  it('shows the cross-app reference label on the card after saving', () => {
+    selectExternalApp();
+    selectTypeaheadOption('Address', 'ORDERS.NEW');
+    saveModal();
+    expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
+  });
+
+  it('shows shared addresses from the selected BrokerApp in the address typeahead', () => {
+    selectExternalApp();
+    fireEvent.click(screen.getByLabelText('Address'));
+    expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
+    expect(screen.getByText('ORDERS.PROCESSED')).toBeInTheDocument();
+  });
+
+  it('shows a create option for a custom address value', () => {
+    selectExternalApp();
+    const addressInput = screen.getByLabelText('Address');
+    fireEvent.click(addressInput);
+    fireEvent.change(addressInput, { target: { value: 'CUSTOM.ADDR' } });
+    expect(screen.getByText('Create "{{value}}"')).toBeInTheDocument();
+  });
+
+  it('clears app name when namespace changes', () => {
+    selectExternalApp();
+    selectTypeaheadOption('App namespace', 'ns-alpha');
+    expect(screen.getByLabelText('App name')).toHaveValue('');
+  });
+
+  it('dispatches appName and appNamespace to the reducer on save', () => {
+    selectExternalApp();
+    selectTypeaheadOption('Address', 'ORDERS.NEW');
+    saveModal();
+    expect(screen.getByText('External')).toBeInTheDocument();
+    expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
+    expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
+  });
+});
+
+describe('AddressManager — switching ownership away from external', () => {
+  beforeEach(() => {
+    setupExternalMocks();
+    render(<Wrapper />);
+    addEntry();
+  });
+
+  afterEach(() => {
+    mockWatchResource.mockReset();
+  });
+
+  it('hides namespace/app fields and clears cross-app label when switching to private', () => {
+    selectExternalApp();
+    selectTypeaheadOption('Address', 'ORDERS.NEW');
+    saveModal();
+    expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Edit address'));
+    fireEvent.click(screen.getByText('Private'));
+    expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
+    saveModal();
+
+    expect(screen.queryByText('service-project/order-generator')).not.toBeInTheDocument();
+    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
+  });
+
+  it('hides namespace/app fields and clears cross-app label when switching to shared', () => {
+    selectExternalApp();
+    selectTypeaheadOption('Address', 'ORDERS.NEW');
+    saveModal();
+    expect(screen.getByText('service-project/order-generator')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Edit address'));
+    fireEvent.click(screen.getByText('Shared'));
+    expect(screen.queryByLabelText('App namespace')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('App name')).not.toBeInTheDocument();
+    saveModal();
+
+    expect(screen.queryByText('service-project/order-generator')).not.toBeInTheDocument();
+    expect(screen.getByText('Shared')).toBeInTheDocument();
+    expect(screen.getByText('ORDERS.NEW')).toBeInTheDocument();
+  });
+});
+
+describe('AddressManager — external create option on namespace/app typeaheads', () => {
+  beforeEach(() => {
+    setupExternalMocks();
+    render(<Wrapper />);
+    addEntry();
+    selectExternal();
+  });
+
+  afterEach(() => {
+    mockWatchResource.mockReset();
+  });
+
+  it('shows a create option for a namespace not in the list', () => {
+    const nsInput = screen.getByLabelText('App namespace');
+    fireEvent.click(nsInput);
+    fireEvent.change(nsInput, { target: { value: 'new-namespace' } });
+    expect(screen.getByText('Create "{{value}}"')).toBeInTheDocument();
+  });
+
+  it('shows a create option for an app name not in the list', () => {
+    selectTypeaheadOption('App namespace', 'service-project');
+    const appInput = screen.getByLabelText('App name');
+    fireEvent.click(appInput);
+    fireEvent.change(appInput, { target: { value: 'new-app' } });
+    expect(screen.getByText('Create "{{value}}"')).toBeInTheDocument();
+  });
+
+  it('does not show a create option when the value matches an existing item', () => {
+    const nsInput = screen.getByLabelText('App namespace');
+    fireEvent.click(nsInput);
+    fireEvent.change(nsInput, { target: { value: 'service-project' } });
+    expect(screen.queryByText('Create "{{value}}"')).not.toBeInTheDocument();
   });
 });
