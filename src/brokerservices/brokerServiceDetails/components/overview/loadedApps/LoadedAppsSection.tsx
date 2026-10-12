@@ -16,21 +16,51 @@ export interface LoadedAppsSectionProps {
   brokerService: BrokerService;
 }
 
+export interface ProvisionedAppRef {
+  namespace: string;
+  name: string;
+  generation: number;
+}
+
 /**
- * Filters BrokerApps bound to a BrokerService via status.service (not selectors).
+ * Parses a `<namespace>/<name>@<generation>` string from status.provisionedApps.
+ * Returns null for malformed entries so callers can filter gracefully.
+ */
+export function parseProvisionedAppRef(entry: string): ProvisionedAppRef | null {
+  const slashIdx = entry.indexOf('/');
+  const atIdx = entry.indexOf('@');
+  if (slashIdx < 1 || atIdx <= slashIdx + 1) {
+    return null;
+  }
+  const namespace = entry.slice(0, slashIdx);
+  const name = entry.slice(slashIdx + 1, atIdx);
+  const generation = parseInt(entry.slice(atIdx + 1), 10);
+  if (!name || isNaN(generation)) {
+    return null;
+  }
+  return { namespace, name, generation };
+}
+
+/**
+ * Returns BrokerApps that appear in the service's provisionedApps list,
+ * matching on namespace and name. Malformed entries are silently skipped.
  */
 export function filterLoadedBrokerApps(
   apps: BrokerAppCR[],
-  serviceName: string,
-  serviceNamespace: string,
+  provisionedApps: string[],
 ): BrokerAppCR[] {
-  if (!serviceName || !serviceNamespace) {
+  if (!provisionedApps.length) {
     return [];
   }
 
+  const refs = provisionedApps
+    .map(parseProvisionedAppRef)
+    .filter((ref): ref is ProvisionedAppRef => ref !== null);
+
   return apps.filter((app) => {
-    const boundService = app.status?.service;
-    return boundService?.name === serviceName && boundService.namespace === serviceNamespace;
+    const appName = app.metadata?.name;
+    const appNamespace = app.metadata?.namespace;
+    return refs.some((ref) => ref.name === appName && ref.namespace === appNamespace);
   });
 }
 
@@ -39,8 +69,7 @@ export function filterLoadedBrokerApps(
  */
 export const LoadedAppsSection: FC<LoadedAppsSectionProps> = ({ brokerService }) => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
-  const serviceName = brokerService.metadata?.name ?? '';
-  const serviceNamespace = brokerService.metadata?.namespace ?? '';
+  const provisionedApps = brokerService.status?.provisionedApps ?? [];
 
   const [apps, loaded, loadError] = useK8sWatchResource<BrokerAppCR[]>({
     groupVersionKind: {
@@ -49,14 +78,9 @@ export const LoadedAppsSection: FC<LoadedAppsSectionProps> = ({ brokerService })
       kind: BrokerAppModel.kind,
     },
     isList: true,
-    namespace: serviceNamespace,
   }) as [BrokerAppCR[], boolean, unknown];
 
-  const loadedApps = filterLoadedBrokerApps(
-    Array.isArray(apps) ? apps : [],
-    serviceName,
-    serviceNamespace,
-  );
+  const loadedApps = filterLoadedBrokerApps(Array.isArray(apps) ? apps : [], provisionedApps);
 
   const statusLabels = {
     Running: t('Provisioned'),

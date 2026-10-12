@@ -2,7 +2,11 @@ import { render, screen } from '@testing-library/react';
 import { useK8sWatchResource } from '@openshift-console/dynamic-plugin-sdk';
 import type { BrokerAppCR, BrokerService } from '../../../../../k8s/types';
 import { K8sResourceConditionStatus } from '../../../../../k8s/types';
-import { filterLoadedBrokerApps, LoadedAppsSection } from './LoadedAppsSection';
+import {
+  filterLoadedBrokerApps,
+  LoadedAppsSection,
+  parseProvisionedAppRef,
+} from './LoadedAppsSection';
 
 const mockUseK8sWatchResource = useK8sWatchResource as jest.Mock;
 
@@ -10,38 +14,75 @@ const brokerService: BrokerService = {
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerService',
   metadata: { name: 'my-messaging-service', namespace: 'default' },
+  status: {
+    provisionedApps: ['default/my-messaging-app@1'],
+  },
 };
 
-const makeApp = (name: string, service?: { name: string; namespace: string }): BrokerAppCR => ({
+const makeApp = (name: string, namespace = 'default'): BrokerAppCR => ({
   apiVersion: 'broker.arkmq.org/v1beta2',
   kind: 'BrokerApp',
-  metadata: { name, namespace: 'default' },
+  metadata: { name, namespace },
   spec: {},
   status: {
-    service: service ? { ...service, assignedPort: 0 } : undefined,
     conditions: [{ type: 'Deployed', status: K8sResourceConditionStatus.True }],
   },
 });
 
-describe('filterLoadedBrokerApps', () => {
-  it('returns an empty list when service identity is incomplete', () => {
-    expect(filterLoadedBrokerApps([makeApp('app-1')], '', 'default')).toEqual([]);
-    expect(filterLoadedBrokerApps([makeApp('app-1')], 'my-messaging-service', '')).toEqual([]);
+describe('parseProvisionedAppRef', () => {
+  it('parses a well-formed entry', () => {
+    expect(parseProvisionedAppRef('my-ns/my-app@3')).toEqual({
+      namespace: 'my-ns',
+      name: 'my-app',
+      generation: 3,
+    });
   });
 
-  it('keeps only apps bound to the given service name and namespace', () => {
-    const apps = [
-      makeApp('bound', { name: 'my-messaging-service', namespace: 'default' }),
-      makeApp('other-service', { name: 'other', namespace: 'default' }),
-      makeApp('other-ns', { name: 'my-messaging-service', namespace: 'other' }),
-      makeApp('unbound'),
-    ];
+  it('returns null for entries missing a slash', () => {
+    expect(parseProvisionedAppRef('my-app@3')).toBeNull();
+  });
 
-    expect(
-      filterLoadedBrokerApps(apps, 'my-messaging-service', 'default').map(
-        (app) => app.metadata?.name,
-      ),
-    ).toEqual(['bound']);
+  it('returns null for entries missing an at-sign', () => {
+    expect(parseProvisionedAppRef('my-ns/my-app')).toBeNull();
+  });
+
+  it('returns null for an empty namespace', () => {
+    expect(parseProvisionedAppRef('/my-app@3')).toBeNull();
+  });
+
+  it('returns null for an empty name', () => {
+    expect(parseProvisionedAppRef('my-ns/@3')).toBeNull();
+  });
+
+  it('returns null for a non-numeric generation', () => {
+    expect(parseProvisionedAppRef('my-ns/my-app@abc')).toBeNull();
+  });
+});
+
+describe('filterLoadedBrokerApps', () => {
+  it('returns an empty list when provisionedApps is empty', () => {
+    expect(filterLoadedBrokerApps([makeApp('app-1')], [])).toEqual([]);
+  });
+
+  it('keeps only apps matching a provisionedApps entry', () => {
+    const apps = [makeApp('bound'), makeApp('other'), makeApp('also-bound')];
+
+    const result = filterLoadedBrokerApps(apps, ['default/bound@1', 'default/also-bound@2']);
+
+    expect(result.map((app) => app.metadata?.name)).toEqual(['bound', 'also-bound']);
+  });
+
+  it('matches on both namespace and name', () => {
+    const apps = [makeApp('my-app', 'ns-a'), makeApp('my-app', 'ns-b')];
+
+    const result = filterLoadedBrokerApps(apps, ['ns-b/my-app@1']);
+    expect(result.map((app) => app.metadata?.namespace)).toEqual(['ns-b']);
+  });
+
+  it('skips malformed provisionedApps entries gracefully', () => {
+    const apps = [makeApp('good')];
+    const result = filterLoadedBrokerApps(apps, ['default/good@1', 'malformed-entry']);
+    expect(result.map((app) => app.metadata?.name)).toEqual(['good']);
   });
 });
 
@@ -56,9 +97,13 @@ describe('LoadedAppsSection', () => {
     expect(screen.getByRole('progressbar', { name: 'Loading BrokerApps' })).toBeInTheDocument();
   });
 
-  it('shows an empty state when no apps are bound', () => {
-    mockUseK8sWatchResource.mockReturnValue([[], true, undefined]);
-    render(<LoadedAppsSection brokerService={brokerService} />);
+  it('shows an empty state when no apps are provisioned', () => {
+    const serviceWithNoApps: BrokerService = {
+      ...brokerService,
+      status: { provisionedApps: [] },
+    };
+    mockUseK8sWatchResource.mockReturnValue([[makeApp('stray')], true, undefined]);
+    render(<LoadedAppsSection brokerService={serviceWithNoApps} />);
     expect(screen.getByText('No loaded apps')).toBeInTheDocument();
   });
 
@@ -68,12 +113,9 @@ describe('LoadedAppsSection', () => {
     expect(screen.getByText('An error occurred')).toBeInTheDocument();
   });
 
-  it('renders bound apps with status and consumer-count placeholder', () => {
+  it('renders provisioned apps with status and consumer-count placeholder', () => {
     mockUseK8sWatchResource.mockReturnValue([
-      [
-        makeApp('my-messaging-app', { name: 'my-messaging-service', namespace: 'default' }),
-        makeApp('ignored', { name: 'other', namespace: 'default' }),
-      ],
+      [makeApp('my-messaging-app'), makeApp('ignored')],
       true,
       undefined,
     ]);
