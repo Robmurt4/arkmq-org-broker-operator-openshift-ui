@@ -117,6 +117,16 @@ describe('GeneralDetailsSection', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders the default instance label on initial create', () => {
+    render(<GeneralDetailsSectionWrapper namespace={TEST_NAMESPACE} />);
+
+    const keyInputs = screen.getAllByLabelText('Label key');
+    const valueInputs = screen.getAllByLabelText('Label value');
+    expect(keyInputs).toHaveLength(1);
+    expect(keyInputs[0]).toHaveValue('app.kubernetes.io/instance');
+    expect(valueInputs[0]).toHaveValue('my-messaging-service');
+  });
+
   it('renders the copy labels link in the Labels section', () => {
     render(<GeneralDetailsSectionWrapper namespace={TEST_NAMESPACE} />);
 
@@ -200,20 +210,18 @@ describe('GeneralDetailsSection', () => {
     expect(screen.getAllByLabelText('Label key')).toHaveLength(2);
 
     await user.click(screen.getAllByLabelText('Remove label')[0]);
-    expect(screen.getAllByLabelText('Label key')).toHaveLength(1);
+    expect(screen.getAllByLabelText('Label key')).toHaveLength(1)
   });
 
   it('adds a label row when Add Label is clicked', async () => {
     const user = userEvent.setup();
     render(<GeneralDetailsSectionWrapper namespace={TEST_NAMESPACE} />);
 
-    expect(screen.queryByLabelText('Label key')).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText('Label key')).toHaveLength(1);
 
     await user.click(screen.getByTestId('add-label-button'));
 
-    expect(screen.getByLabelText('Label key')).toBeInTheDocument();
-    expect(screen.getByLabelText('Label value')).toBeInTheDocument();
-    expect(screen.getByLabelText('Remove label')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Label key')).toHaveLength(2);
   });
 
   it('updates label key and value when the user types', async () => {
@@ -222,14 +230,14 @@ describe('GeneralDetailsSection', () => {
 
     await user.click(screen.getByTestId('add-label-button'));
 
-    const keyInput = screen.getByLabelText('Label key');
-    const valueInput = screen.getByLabelText('Label value');
+    const keyInputs = screen.getAllByLabelText('Label key');
+    const valueInputs = screen.getAllByLabelText('Label value');
 
-    await user.type(keyInput, 'forWorkQueue');
-    await user.type(valueInput, 'true');
+    await user.type(keyInputs[1], 'forWorkQueue');
+    await user.type(valueInputs[1], 'true');
 
-    expect(keyInput).toHaveValue('forWorkQueue');
-    expect(valueInput).toHaveValue('true');
+    expect(keyInputs[1]).toHaveValue('forWorkQueue');
+    expect(valueInputs[1]).toHaveValue('true');
   });
 
   it('removes a label row when the remove button is clicked', async () => {
@@ -237,12 +245,12 @@ describe('GeneralDetailsSection', () => {
     render(<GeneralDetailsSectionWrapper namespace={TEST_NAMESPACE} />);
 
     await user.click(screen.getByTestId('add-label-button'));
-    expect(screen.getByLabelText('Label key')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Label key')).toHaveLength(2);
 
-    await user.click(screen.getByLabelText('Remove label'));
+    const removeButtons = screen.getAllByLabelText('Remove label');
+    await user.click(removeButtons[1]);
 
-    expect(screen.queryByLabelText('Label key')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Label value')).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText('Label key')).toHaveLength(1);
   });
 
   it('renders existing labels from the initial form state', () => {
@@ -265,8 +273,8 @@ describe('GeneralDetailsSection', () => {
     await user.click(screen.getByTestId('add-label-button'));
     await user.click(screen.getByTestId('add-label-button'));
 
-    expect(screen.getAllByLabelText('Label key')).toHaveLength(2);
-    expect(screen.getAllByLabelText('Label value')).toHaveLength(2);
+    expect(screen.getAllByLabelText('Label key')).toHaveLength(3);
+    expect(screen.getAllByLabelText('Label value')).toHaveLength(3);
   });
 
   it('shows a validation error when duplicate label keys are entered', async () => {
@@ -277,8 +285,8 @@ describe('GeneralDetailsSection', () => {
     await user.click(screen.getByTestId('add-label-button'));
 
     const keyInputs = screen.getAllByLabelText('Label key');
-    await user.type(keyInputs[0], 'key1');
     await user.type(keyInputs[1], 'key1');
+    await user.type(keyInputs[2], 'key1');
 
     expect(screen.getByText('Duplicate label key "key1"')).toBeInTheDocument();
   });

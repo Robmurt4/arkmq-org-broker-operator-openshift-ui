@@ -21,7 +21,11 @@ import {
   useBrokerServiceFormState,
   useBrokerServiceFormDispatch,
 } from '../../../reducers/brokerservice/reducer';
-import { validateDNS1123, validateLabelEntries } from '../../../validation/k8s';
+import {
+  validateDNS1123,
+  validateLabelEntries,
+  validateRequiredLabels,
+} from '../../../validation/k8s';
 import { CopyLabelsFromServiceModal } from './CopyLabelsFromServiceModal';
 
 export interface GeneralDetailsSectionProps {
@@ -45,7 +49,7 @@ export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({
 
   const name = cr.metadata?.name ?? '';
   const nameError = validateDNS1123(name) ?? undefined;
-  const labelsError = validateLabelEntries(labels) ?? undefined;
+  const labelsError = validateRequiredLabels(labels) ?? validateLabelEntries(labels) ?? undefined;
   const duplicateLabelKeys = useMemo(() => {
     const counts = new Map<string, number>();
     labels.forEach(({ key }) => {
@@ -110,7 +114,7 @@ export const GeneralDetailsSection: FC<GeneralDetailsSectionProps> = ({
         </FormHelperText>
       </FormGroup>
 
-      <FormGroup label={t('Labels')} fieldId="broker-service-labels">
+      <FormGroup label={t('Labels')} isRequired fieldId="broker-service-labels">
         <Stack hasGutter>
           <StackItem>
             <FormHelperText>

@@ -592,7 +592,11 @@ test.describe('BrokerService Edit Page', () => {
   });
 
   test('saves memory changes to the cluster and returns to details', async ({ page }) => {
-    applyYaml(brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE));
+    applyYaml(
+      brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE, {
+        'app.kubernetes.io/instance': EDIT_SERVICE_NAME,
+      }),
+    );
     await waitForCondition(
       'brokerservice',
       EDIT_SERVICE_NAME,
@@ -620,7 +624,11 @@ test.describe('BrokerService Edit Page', () => {
   });
 
   test('reload discards unsaved memory edits and restores cluster values', async ({ page }) => {
-    applyYaml(brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE));
+    applyYaml(
+      brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE, {
+        'app.kubernetes.io/instance': EDIT_SERVICE_NAME,
+      }),
+    );
     await waitForCondition(
       'brokerservice',
       EDIT_SERVICE_NAME,
@@ -651,7 +659,11 @@ test.describe('BrokerService Edit Page', () => {
   });
 
   test('cancel with unsaved changes returns to details via returnUrl', async ({ page }) => {
-    applyYaml(brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE));
+    applyYaml(
+      brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE, {
+        'app.kubernetes.io/instance': EDIT_SERVICE_NAME,
+      }),
+    );
     await waitForCondition(
       'brokerservice',
       EDIT_SERVICE_NAME,
@@ -683,9 +695,12 @@ test.describe('BrokerService Edit Page', () => {
 
   test('loads existing environment variables from the cluster into the form', async ({ page }) => {
     applyYaml(
-      brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE, undefined, [
-        { name: 'BROKER_MAX_CONNECTIONS', value: '500' },
-      ]),
+      brokerServiceYaml(
+        EDIT_SERVICE_NAME,
+        EDIT_NAMESPACE,
+        { 'app.kubernetes.io/instance': EDIT_SERVICE_NAME },
+        [{ name: 'BROKER_MAX_CONNECTIONS', value: '500' }],
+      ),
     );
     await waitForCondition(
       'brokerservice',
@@ -709,7 +724,11 @@ test.describe('BrokerService Edit Page', () => {
   });
 
   test('adds an environment variable and saves it to the cluster', async ({ page }) => {
-    applyYaml(brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE));
+    applyYaml(
+      brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE, {
+        'app.kubernetes.io/instance': EDIT_SERVICE_NAME,
+      }),
+    );
     await waitForCondition(
       'brokerservice',
       EDIT_SERVICE_NAME,
@@ -739,9 +758,12 @@ test.describe('BrokerService Edit Page', () => {
 
   test('removes an environment variable and saves the change to the cluster', async ({ page }) => {
     applyYaml(
-      brokerServiceYaml(EDIT_SERVICE_NAME, EDIT_NAMESPACE, undefined, [
-        { name: 'BROKER_MAX_CONNECTIONS', value: '500' },
-      ]),
+      brokerServiceYaml(
+        EDIT_SERVICE_NAME,
+        EDIT_NAMESPACE,
+        { 'app.kubernetes.io/instance': EDIT_SERVICE_NAME },
+        [{ name: 'BROKER_MAX_CONNECTIONS', value: '500' }],
+      ),
     );
     await waitForCondition(
       'brokerservice',
