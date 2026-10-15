@@ -100,11 +100,28 @@ push it to an image registry.
    docker build -t quay.io/arkmq-org/arkmq-org-broker-operator-openshift-ui:latest .
    ```
 
-2. Run the image:
+2. Run the image locally:
+
+   The image serves over TLS on port 9443, so you need a certificate to run it.
+   Generate a self-signed certificate for local testing:
 
    ```sh
-   docker run -it --rm -d -p 9001:80 quay.io/arkmq-org/arkmq-org-broker-operator-openshift-ui:latest
+   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout /tmp/tls.key -out /tmp/tls.crt \
+     -subj "/CN=localhost" && chmod 644 /tmp/tls.key
    ```
+
+   Then start the container, mounting the certificate and mapping the port:
+
+   ```sh
+   docker run -it --rm -d -p 9443:9443 \
+     -v /tmp/tls.crt:/var/cert/tls.crt:ro \
+     -v /tmp/tls.key:/var/cert/tls.key:ro \
+     quay.io/arkmq-org/arkmq-org-broker-operator-openshift-ui:latest
+   ```
+
+   The plugin will be available at `https://localhost:9443`. Your browser will
+   warn about the self-signed certificate — this is expected for local testing.
 
 3. Push the image:
 
