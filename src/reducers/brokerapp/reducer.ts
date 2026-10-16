@@ -190,7 +190,7 @@ const mergeMatchLabelsWithYaml = (
  * Reconstructs the address list from the three CRD spec fields
  * when loading a CR from YAML or an existing resource.
  */
-const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
+export const hydrateAddresses = (cr: BrokerAppCR): Address[] => {
   const addresses: Address[] = [];
 
   const cap = cr.spec.capabilities?.[0];

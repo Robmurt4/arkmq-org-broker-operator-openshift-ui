@@ -39,7 +39,7 @@ const OWNERSHIP_LABELS = {
   external: 'External',
 } as const;
 
-// Card-grid form section for managing BrokerApp addresses.
+/** Card-grid form section for managing BrokerApp addresses. */
 export const AddressManager: React.FC = () => {
   const { t } = useTranslation('plugin__arkmq-org-broker-operator-openshift-ui');
   const state = useBrokerAppFormState();
@@ -156,7 +156,7 @@ export const AddressManager: React.FC = () => {
               <CardBody>
                 <Stack hasGutter>
                   <StackItem>
-                    <LabelGroup>
+                    <LabelGroup numLabels={5}>
                       <Label color={OWNERSHIP_COLORS[entry.ownership]} isCompact>
                         {t(OWNERSHIP_LABELS[entry.ownership])}
                       </Label>
