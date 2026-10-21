@@ -210,7 +210,7 @@ describe('GeneralDetailsSection', () => {
     expect(screen.getAllByLabelText('Label key')).toHaveLength(2);
 
     await user.click(screen.getAllByLabelText('Remove label')[0]);
-    expect(screen.getAllByLabelText('Label key')).toHaveLength(1)
+    expect(screen.getAllByLabelText('Label key')).toHaveLength(1);
   });
 
   it('adds a label row when Add Label is clicked', async () => {

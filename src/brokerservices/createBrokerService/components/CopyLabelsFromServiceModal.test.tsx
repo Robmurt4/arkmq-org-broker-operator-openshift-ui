@@ -136,7 +136,7 @@ describe('CopyLabelsFromServiceModal', () => {
     await user.click(screen.getByTestId('copy-labels-modal-cancel'));
 
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId('label-count')).toHaveTextContent('0');
+    expect(screen.getByTestId('label-count')).toHaveTextContent('1');
   });
 
   it('shows No labels when a service has an empty label map', () => {

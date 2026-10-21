@@ -101,6 +101,13 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
               if (crError) {
                 return { ok: false, error: crError };
               }
+              const selectorLabels = parsed.spec.selector?.matchLabels;
+              if (!selectorLabels || !Object.keys(selectorLabels).length) {
+                return {
+                  ok: false,
+                  error: 'spec.selector.matchLabels: At least one match label is required',
+                };
+              }
               dispatch({
                 type: 'SET_MODEL',
                 payload: parsed,

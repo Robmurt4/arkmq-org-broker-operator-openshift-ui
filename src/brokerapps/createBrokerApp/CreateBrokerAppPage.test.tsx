@@ -137,6 +137,7 @@ describe('CreateBrokerAppPage — isFormValid integration', () => {
       buildYaml({
         addresses: [{ address: 'orders' }],
         sharedAddresses: [{ address: 'events' }],
+        selector: { matchLabels: { 'app.kubernetes.io/instance': 'test' } },
       }),
     );
     expect(result?.ok).toBe(true);
