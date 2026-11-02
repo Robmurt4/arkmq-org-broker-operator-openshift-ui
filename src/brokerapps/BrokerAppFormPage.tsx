@@ -84,9 +84,12 @@ export const BrokerAppFormPage: React.FC<BrokerAppFormPageProps> = ({
             if (crError) {
               throw new Error(crError);
             }
-            const selectorLabels = parsed.spec.selector?.matchLabels;
+            const rawSpec = parsed.spec as Partial<BrokerAppCR['spec']> | undefined;
+            const selectorLabels = rawSpec?.serviceSelector?.matchLabels;
             if (!selectorLabels || !Object.keys(selectorLabels).length) {
-              throw new Error('spec.selector.matchLabels: At least one match label is required');
+              throw new Error(
+                'spec.serviceSelector.matchLabels: At least one match label is required',
+              );
             }
             return onSubmit(parsed);
           }}

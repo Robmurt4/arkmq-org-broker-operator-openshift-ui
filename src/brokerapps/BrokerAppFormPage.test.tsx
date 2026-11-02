@@ -22,6 +22,11 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+let capturedOnYamlSave: ((yaml: string) => Promise<void>) | undefined;
+
+const VALID_YAML =
+  'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid-app\nspec:\n  serviceSelector:\n    matchLabels:\n      app.kubernetes.io/instance: my-svc';
+
 /** YAML editor cannot run in jsdom — mock renders children and form action buttons. */
 jest.mock('../shared-components/ResourceFormEditor', () => ({
   ResourceFormEditor: ({
@@ -42,31 +47,27 @@ jest.mock('../shared-components/ResourceFormEditor', () => ({
     onYamlSave: (yaml: string) => Promise<void>;
     submitLabel?: string;
     isFormValid?: boolean;
-  }) => (
-    <>
-      {children}
-      <button
-        data-test={createButtonTestId}
-        onClick={() => void onFormSubmit()}
-        disabled={!isFormValid}
-      >
-        {submitLabel ?? 'Create'}
-      </button>
-      <button data-test={cancelButtonTestId} onClick={onCancel}>
-        Cancel
-      </button>
-      <button
-        data-test="yaml-save-btn"
-        onClick={() =>
-          void onYamlSave(
-            'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: valid-app\nspec:\n  selector:\n    matchLabels:\n      app.kubernetes.io/instance: my-svc',
-          )
-        }
-      >
-        YAML Save
-      </button>
-    </>
-  ),
+  }) => {
+    capturedOnYamlSave = onYamlSave;
+    return (
+      <>
+        {children}
+        <button
+          data-test={createButtonTestId}
+          onClick={() => void onFormSubmit()}
+          disabled={!isFormValid}
+        >
+          {submitLabel ?? 'Create'}
+        </button>
+        <button data-test={cancelButtonTestId} onClick={onCancel}>
+          Cancel
+        </button>
+        <button data-test="yaml-save-btn" onClick={() => void onYamlSave(VALID_YAML)}>
+          YAML Save
+        </button>
+      </>
+    );
+  },
 }));
 
 const makeValidState = (): BrokerAppFormState => {
@@ -192,6 +193,20 @@ describe('BrokerAppFormPage', () => {
       await user.click(screen.getByTestId('yaml-save-btn'));
 
       expect(mockOnSubmit).toHaveBeenCalled();
+    });
+
+    it('throws a readable error instead of TypeError when serviceSelector is missing from YAML', () => {
+      render(<Wrapper />);
+
+      const yamlWithoutSelector =
+        'apiVersion: broker.arkmq.org/v1beta2\nkind: BrokerApp\nmetadata:\n  name: no-selector\nspec:\n  capabilities: []';
+
+      if (!capturedOnYamlSave) throw new Error('onYamlSave not captured');
+      const yamlSave = capturedOnYamlSave;
+      expect(() => yamlSave(yamlWithoutSelector)).toThrow(
+        'spec.serviceSelector.matchLabels: At least one match label is required',
+      );
+      expect(mockOnSubmit).not.toHaveBeenCalled();
     });
   });
 });

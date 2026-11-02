@@ -147,7 +147,7 @@ metadata:
   name: ${APP_NAME}
   namespace: ${TEST_NAMESPACE}
 spec:
-  selector:
+  serviceSelector:
     matchLabels:
       forWorkQueue: "true"
   capabilities:

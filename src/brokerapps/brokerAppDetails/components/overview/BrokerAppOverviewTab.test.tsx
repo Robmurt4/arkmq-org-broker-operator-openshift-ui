@@ -13,6 +13,7 @@ const brokerApp: BrokerAppCR = {
     resourceVersion: '42',
   },
   spec: {
+    serviceSelector: {},
     addresses: [{ address: 'payment.transactions' }],
     capabilities: [
       {
@@ -75,5 +76,17 @@ describe('BrokerAppOverviewTab', () => {
     expect(screen.getByText('payment.requests')).toBeInTheDocument();
     expect(screen.getByText('Private')).toBeInTheDocument();
     expect(screen.getByText('External')).toBeInTheDocument();
+  });
+
+  it('renders without crashing when serviceSelector is missing from the CR', () => {
+    const crWithoutSelector = {
+      ...brokerApp,
+      spec: { ...brokerApp.spec, serviceSelector: undefined },
+    } as unknown as BrokerAppCR;
+
+    render(<BrokerAppOverviewTab obj={crWithoutSelector} />);
+
+    expect(screen.getByTestId('broker-app-overview-tab')).toBeInTheDocument();
+    expect(screen.getByTestId('resource-labels-and-annotations')).toBeInTheDocument();
   });
 });
