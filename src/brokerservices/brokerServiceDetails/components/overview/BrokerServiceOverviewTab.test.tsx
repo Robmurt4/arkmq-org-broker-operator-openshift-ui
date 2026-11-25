@@ -63,6 +63,23 @@ describe('BrokerServiceOverviewTab', () => {
     expect(screen.queryByTestId('broker-service-pending-empty')).not.toBeInTheDocument();
   });
 
+  it('shows drain alert when deletionTimestamp is set', () => {
+    render(
+      <BrokerServiceOverviewTab
+        obj={{
+          ...brokerService,
+          metadata: { ...brokerService.metadata, deletionTimestamp: '2026-01-01T00:00:00Z' },
+        }}
+      />,
+    );
+    expect(screen.getByTestId('drain-in-progress-alert')).toBeInTheDocument();
+  });
+
+  it('does not show drain alert when deletionTimestamp is absent', () => {
+    render(<BrokerServiceOverviewTab obj={brokerService} />);
+    expect(screen.queryByTestId('drain-in-progress-alert')).not.toBeInTheDocument();
+  });
+
   it('shows pending empty section when status.pendingEmpty has entries', () => {
     render(
       <BrokerServiceOverviewTab

@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { PageSection, Stack, StackItem, Title } from '@patternfly/react-core';
+import { Alert, PageSection, Stack, StackItem, Title } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import type { BrokerService } from '../../../../k8s/types';
 import { ConditionsTable } from '../../../../shared-components/resourceDetails/ConditionsTable';
@@ -22,6 +22,20 @@ export const BrokerServiceOverviewTab: FC<BrokerServiceOverviewTabProps> = ({ ob
   return (
     <PageSection data-test="broker-service-overview-tab">
       <Stack hasGutter>
+        {obj?.metadata?.deletionTimestamp && (
+          <StackItem>
+            <Alert
+              variant="info"
+              isInline
+              title={t('This service is being deleted')}
+              data-test="drain-in-progress-alert"
+            >
+              {t(
+                'Message drain is in progress — the service will be removed once all pending messages are consumed.',
+              )}
+            </Alert>
+          </StackItem>
+        )}
         <StackItem>
           <Title headingLevel="h2" className="pf-v6-u-mb-md">
             {t('BrokerService details')}
